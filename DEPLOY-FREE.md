@@ -701,23 +701,52 @@ commission.
 
 ### Optional: signed APK for sideloading
 
-Only needed if you want a file to hand out, or for devices without Chrome.
-One-time setup:
+Only needed if you want a file to hand out, or for devices without Chrome. Run
+this on your laptop: `eas-cli` 25 wants Node 20.18+ and Ubuntu 24.04 ships 18.19,
+so the VM is the wrong machine — and no global install is needed anyway:
 
 ```bash
 cd mobile
-npm i -g eas-cli          # or prefix each command with npx
-eas login
-# set the real origin in eas.json -> build.download.env.EXPO_PUBLIC_API_URL
-eas build -p android --profile download     # cloud (free tier) or add --local
+npx eas-cli@latest login
+```
+
+`npx eas login` is not the same thing: npm resolves the package `eas`, an
+unrelated templating library.
+
+Then set the origin and build:
+
+```bash
+# 1. mobile/eas.json -> build.download.env.EXPO_PUBLIC_API_URL
+#    https://<SITE_DOMAIN>, not CHANGE-ME, and commit it: eas.json is tracked, so
+#    an uncommitted edit blocks `git pull` on the VM later (§7).
+# 2. build
+npx eas-cli@latest build -p android --profile download
 ```
 
 `EXPO_PUBLIC_DEMO=false` is already set in that profile, so the demo logins are
-hidden. The build fails immediately if the API URL is still the `CHANGE-ME`
-placeholder, instead of shipping an app that points at nowhere.
+hidden. The build fails immediately if the API URL is missing or still the
+`CHANGE-ME` placeholder — `app.config.js` treats the `download` profile like
+production for exactly that reason — instead of shipping an app that silently
+falls back to `10.0.2.2:3003` (the emulator's host) and looks broken on a phone.
 
-Publish the APK. The page probes exactly `/downloads/pointbreak.apk`, so the
-filename matters:
+Build only once the domain answers over HTTPS. The URL is compiled into the
+bundle, so an APK built against a domain that is not up yet is dead on arrival and
+costs another build to replace. Free-plan builds are a limited monthly quota of
+low-priority builds with no overage: they queue, and when the quota is gone you
+wait for the reset rather than pay.
+
+`--local` builds the same artifact on your own machine with no queue, but it needs
+JDK 17 and the Android SDK, and Expo does not support Windows for local builds
+(WSL only, and not tested). For this guide the cloud build is the shorter path.
+
+`eas build` also needs an account that can see this project: `extra.eas.projectId`
+in `mobile/app.config.js` belongs to whoever created it, so logging in as anyone
+else reports the project as missing or unauthorised. `npx eas-cli@latest init`
+creates one under your account and rewrites that id — commit the change.
+
+Publish the APK. EAS deletes build artifacts **30 days** after the build, so the
+build page is not a file host; download it while the link is live. The page probes
+exactly `/downloads/pointbreak.apk`, so the filename matters:
 
 ```bash
 # cloud build: EAS prints an artifact URL (the build page has a download button);

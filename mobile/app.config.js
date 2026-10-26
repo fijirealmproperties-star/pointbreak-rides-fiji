@@ -1,9 +1,10 @@
 // Dynamic Expo config — the single source of truth for app metadata.
 // Env-dependent values come from the EAS build profile or a local .env:
-//   EXPO_PUBLIC_API_URL  (required for store builds) HTTPS origin of the API
+//   EXPO_PUBLIC_API_URL  (required for store and download builds) HTTPS origin
 //   EXPO_PUBLIC_DEMO     "false" hides demo accounts/buttons in store builds
 const IS_PROD =
   process.env.EAS_BUILD_PROFILE === "production" ||
+  process.env.EAS_BUILD_PROFILE === "download" ||
   process.env.APP_VARIANT === "production";
 
 const apiUrl = (process.env.EXPO_PUBLIC_API_URL || "").replace(/\/+$/, "");
