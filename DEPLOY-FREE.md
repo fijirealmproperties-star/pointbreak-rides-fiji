@@ -298,6 +298,12 @@ days, and never stops the app. It copies the file inside the container first
 catch it mid-write), verifies the SQLite header, then renames into place.
 Override with `BACKUP_DIR`, `BACKUP_KEEP_DAYS`, `SERVICE`, `DB_FILE`.
 
+By hand it needs `sudo` too, because `/var/backups` is root-owned — without it
+the run stops at `ERROR: cannot create /var/backups/pointbreak`. `sudo sh
+scripts/backup.sh` works from any directory, or keep it user-owned with
+`BACKUP_DIR="$HOME/backups" sh scripts/backup.sh` (then point `restore.sh` at
+that path as well — not at the clone itself, so the backups survive a re-clone).
+
 Restore one:
 
 ```bash
