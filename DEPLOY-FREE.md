@@ -176,7 +176,9 @@ nano .env
 #   OSRM_URL=http://osrm:5000
 #   NOMINATIM_URL=http://nominatim:8080
 
-SITE_DOMAIN=$(sed -n 's/^SITE_DOMAIN=//p' .env | tr -d '\r')
+# the shell does not read .env; build the origin for the checks below
+SITE_URL=$(sed -n 's/^SITE_DOMAIN=//p' .env | tr -d '\r')
+case "$SITE_URL" in http://* | https://*) ;; *) SITE_URL="https://$SITE_URL" ;; esac
 
 docker compose config --quiet            # .env parses, nothing is misspelled
 bash scripts/prepare-fiji-maps.sh        # ~17 MB download, then the OSRM graph
@@ -190,8 +192,8 @@ keys and the first admin password, hence `600` and gitignored: never commit it.
 users: leave either empty with `SEED_DEMO=false` and the API exits at boot
 (`docker compose logs pointbreak-api` says which one is missing), and changing
 them later has no effect — use `/admin` instead. The shell does not read `.env`,
-so `$SITE_DOMAIN` is pulled out by hand for the checks below; in a new terminal,
-re-run that line.
+so `$SITE_URL` is built by hand for the checks below; in a new terminal, re-run
+those three lines.
 
 `prepare-fiji-maps.sh` writes only to `data/` (OSRM graph + the PBF that
 Nominatim imports) and `data/` is in `.dockerignore`, so it is not uploaded as
@@ -219,11 +221,18 @@ no restart needed. Re-run the smoke test below to see when.
 Check it:
 
 ```bash
-curl -s https://$SITE_DOMAIN/api/health
+curl -sS --max-time 10 "$SITE_URL/api/health"
+# {"ok":true,"service":"pointbreak-rides-fiji","time":"2026-…Z"}
 
 # one command for the whole stack: edge, PWA, login, geocoding, routing
-bash scripts/smoke-test.sh https://$SITE_DOMAIN
+bash scripts/smoke-test.sh "$SITE_URL"
 ```
+
+`-sS`, not `-s`: plain `-s` also hides the error message, so an unset variable
+or a blocked port prints *nothing* and looks like a hang. `--max-time` stops a
+filtered 443 from sitting there. A `502` means Caddy is up and the API container
+is not. `smoke-test.sh` also accepts no argument — it reads `SITE_DOMAIN` from
+`.env` and prepends `https://` itself.
 
 `smoke-test.sh` prints PASS/FAIL/SKIP per check and exits non-zero on failure.
 It registers one throwaway rider (`+6798……`) you can delete from `/admin`, or
