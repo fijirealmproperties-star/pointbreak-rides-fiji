@@ -10,6 +10,8 @@ server/data/*.sqlite-journal
 # SQLite databases: dev copies and backups may contain real accounts
 *.db
 *.db.tmp
+# Per-machine Compose override (e.g. pin a published image on the VM)
+docker-compose.override.yml
 # Self-hosted map data (OSM extract, OSRM graph, Nominatim database)
 data/
 # Downloadable builds (Android APK) served by the /download page

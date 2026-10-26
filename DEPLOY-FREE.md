@@ -412,16 +412,44 @@ sudo /etc/cron.daily/pointbreak-backup        # repopulate the local history
 ## 5. Updates
 
 ```bash
-git pull
+cd ~/pointbreak
+git pull --ff-only
 docker compose --profile maps up -d --build
 ```
 
-Using a prebuilt image (§7) instead? Skip `git pull` and build nothing:
+`--ff-only` makes a locally edited checkout stop instead of turning the pull into
+a merge commit that every later pull has to untangle. The build runs before any
+container is replaced, so a broken build leaves the running app alone; the
+downtime is just the recreate, a few seconds. Expect several minutes on one OCPU
+— a 1 GB AMD micro cannot do this, which is what §7 is for.
+
+Then prove it came back, and reclaim the disk:
+
+```bash
+bash scripts/smoke-test.sh          # no argument: reads SITE_DOMAIN from .env
+docker image prune -f               # the image this build replaced; volumes untouched
+```
+
+Broken update? Go back one commit and rebuild:
+
+```bash
+git log --oneline -5
+git checkout <previous-sha>
+docker compose --profile maps up -d --build
+git switch main
+```
+
+Running the published image (§7)? Keep the `git pull` — Compose, the Caddyfile
+and the scripts still come from git — but skip the build; the image carries the
+app code:
 
 ```bash
 docker compose pull pointbreak-api
 docker compose --profile maps up -d --no-build
 ```
+
+and the same rollback works by pinning `:sha-<commit>` (every CI build is tagged
+with its commit) instead of `:latest` in `docker-compose.override.yml`.
 
 Map data refreshes: delete `data/fiji-latest.osm.pbf` and `data/nominatim`, then
 re-run `bash scripts/prepare-fiji-maps.sh` and bring the stack up again. OSM edits
@@ -475,12 +503,16 @@ above), or run `docker login ghcr.io` on the VM as well.
 
 ### On the VM: run the published image
 
-Replace the `build:` block under `pointbreak-api` in `docker-compose.yml` with
-one line:
+Do not edit `docker-compose.yml` — it is tracked, so the next `git pull` (§5)
+would refuse to overwrite the change. Compose merges a file named
+`docker-compose.override.yml` automatically, and that one lives only on the VM:
 
-```yaml
+```bash
+cat > docker-compose.override.yml <<'EOF'
+services:
   pointbreak-api:
     image: ghcr.io/<you>/pointbreak-rides-fiji:latest
+EOF
 ```
 
 Then:
