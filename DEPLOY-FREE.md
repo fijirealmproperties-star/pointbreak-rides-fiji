@@ -522,6 +522,33 @@ docker compose pull pointbreak-api
 docker compose --profile maps up -d --no-build
 ```
 
+Prove what is actually running — the image is labelled with the commit it was
+built from:
+
+```bash
+docker inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+  "$(docker compose ps -q pointbreak-api)"     # e.g. 35d29c4ad6b4d27ac78074588e9a0a21108a40fc
+git log --oneline -1
+```
+
+`latest` is only whatever CI finished last, and CI takes a couple of minutes, so
+pulling straight after a push can quietly give you the previous build. The label
+tells you which commit is actually being served. Doc-only commits never rebuild it
+— the workflow triggers on `Dockerfile`, `.dockerignore`, `server/`, `web/`,
+`mobile/` and `package.json` — so the label can legitimately lag `HEAD`; a lagging
+*code* commit is the thing to notice. Pinning `:sha-<commit>` removes the guesswork.
+
+This image is `linux/arm64` only (it is built on a native arm64 runner). On an
+amd64 host — the 2× micro from §1 — `pull` stops with `no matching manifest for
+linux/amd64`; that box must build its own (§5) or publish both architectures.
+
+`pull access denied` for a name shaped like `pointbreak-pointbreak-api` — the
+name Compose would give a local build, rather than `ghcr.io/...` — means the
+override file above is missing or was written in a different directory.
+`docker compose config | grep 'image:'` shows what each service will really pull.
+
+`docker image prune -f` afterwards clears the image this pull replaced.
+
 Use `--no-build` from then on (§5 included). A stray `--build` would try to build
 on the VM again, which is exactly what this section avoids. To update, pull and
 `up -d` again.
