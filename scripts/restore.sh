@@ -3,10 +3,15 @@
 #
 #   sh scripts/restore.sh /var/backups/pointbreak/app-2026-10-26.db
 #   FORCE=1 sh scripts/restore.sh ...          # skip the pre-restore safety copy
+#   sh scripts/restore.sh /var/backups/pointbreak/app-pre-restore.db   # undo
 #
 # The API is stopped for the duration (a few seconds). The database that is
 # live right now is copied aside first — to $BACKUP_DIR if that is writable,
 # otherwise to $HOME — so a restore of the wrong day can be undone the same way.
+# That slot holds only the most recent restore; copy it aside to go back further.
+#
+# Exits 0 only if /api/health answers afterwards, so a database that does not
+# boot cannot look like a successful restore.
 
 set -eu
 
@@ -22,6 +27,7 @@ log() { printf '%s %s\n' "$(date '+%F %T')" "$*"; }
 die() { log "ERROR: $*"; exit 1; }
 
 [ $# -eq 1 ] || { echo "usage: $0 /var/backups/pointbreak/app-YYYY-MM-DD.db" >&2; exit 2; }
+SRC_ARG=$1
 SRC=$1
 [ -f "$SRC" ] || die "$SRC does not exist"
 head -c 16 "$SRC" 2>/dev/null | grep -q 'SQLite format 3' || die "$SRC is not a SQLite database"
@@ -51,6 +57,17 @@ else
   log "note: $DEST is not writable — keeping the current database at $SAFETY"
 fi
 
+# Restoring the safety copy itself — the documented undo — would otherwise be
+# clobbered by the copy made two steps below *before* it is read back, turning
+# the rollback into a silent no-op. Read from a duplicate instead.
+if [ "$SRC" = "$SAFETY" ]; then
+  WORK="${TMPDIR:-/tmp}/pointbreak-restore-$$.db"
+  cp "$SRC" "$WORK" || die "could not duplicate $SRC"
+  trap 'rm -f "$WORK"' EXIT
+  log "note: $SRC is the pre-restore copy — using a temporary duplicate for this run"
+  SRC=$WORK
+fi
+
 # 1. Stop the API: it holds the database in memory and would overwrite the
 #    restored file on the next write.
 docker compose stop "$SERVICE" || die "could not stop $SERVICE"
@@ -77,10 +94,29 @@ docker compose run --rm --no-deps -u root --entrypoint sh "$SERVICE" \
   -c "chown node:node '$DB' && rm -f '$DB.tmp'" \
   || die "could not fix ownership of $DB"
 
-# 4. Back online.
+# 4. Back online, then prove the restored file actually boots: a wrong or
+#    truncated database leaves the API restart-looping, and reporting success
+#    for that is worse than reporting nothing.
 docker compose start "$SERVICE" || die "could not start $SERVICE"
 
-log "restored $SRC"
-sleep 3
-docker compose exec -T "$SERVICE" wget -qO- http://localhost:3003/api/health \
-  || log "WARN: /api/health did not answer yet — check: docker compose logs --tail 40 $SERVICE"
+i=0
+ok=0
+while [ "$i" -lt 15 ]; do
+  if docker compose exec -T "$SERVICE" wget -qO- http://localhost:3003/api/health >/dev/null 2>&1; then
+    ok=1
+    break
+  fi
+  i=$((i + 1))
+  sleep 2
+done
+
+if [ "$ok" -eq 1 ]; then
+  log "restored $SRC_ARG"
+else
+  log "ERROR: /api/health did not answer within 30s — the API is not running on this database"
+  log "check: docker compose logs --tail 40 $SERVICE"
+  if [ -f "$SAFETY" ]; then
+    log "roll back to what was live before this run: sh scripts/restore.sh '$SAFETY'"
+  fi
+  exit 1
+fi

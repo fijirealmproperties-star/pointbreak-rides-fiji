@@ -307,14 +307,33 @@ that path as well — not at the clone itself, so the backups survive a re-clone
 Restore one:
 
 ```bash
+ls -l /var/backups/pointbreak          # pick a date that is actually there
 sh scripts/restore.sh /var/backups/pointbreak/app-2026-10-26.db
 ```
 
-It stops the API, keeps the live database (to `$BACKUP_DIR/app-pre-restore.db`,
-or `~/pointbreak-pre-restore.db` when `/var/backups` is not writable for your
-user), rejects anything that is not a Pointbreak SQLite file, copies the backup
-in, fixes ownership (the app runs as `node`, `docker cp` writes as root), starts
-it again and polls `/api/health`. If you cannot keep a safety copy at all,
+There is no confirmation prompt and no dry run, so check the filename first: this
+replaces every account, driver and ride with the contents of that file. The API
+is stopped for the few seconds it takes.
+
+It rejects the file *before* stopping anything unless it is a Pointbreak SQLite
+database (header plus a `users` table in the schema), keeps what is live right
+now at `$BACKUP_DIR/app-pre-restore.db` (or `~/pointbreak-pre-restore.db` when
+`/var/backups` is not writable for your user), copies the backup in, fixes
+ownership (the app runs as `node`, `docker cp` writes as root), restarts, then
+polls `/api/health` for 30 s. If the API does not come back, it exits non-zero
+and prints the rollback command instead of claiming success.
+
+Undo a restore with the safety copy — the file it just replaced:
+
+```bash
+cp /var/backups/pointbreak/app-pre-restore.db /var/backups/pointbreak/keep.db   # optional
+sh scripts/restore.sh /var/backups/pointbreak/app-pre-restore.db
+```
+
+That slot holds **one** restore's worth: each run overwrites it with whatever was
+live at the time. Copy it aside first if you may need to go back two steps. And
+the stack must have been started once already, or the script stops at `no
+container for pointbreak-api`. If you cannot keep a safety copy at all,
 `FORCE=1 sh scripts/restore.sh …` overrides that check.
 
 Copy `/var/backups/pointbreak` off the box occasionally — a backup on the same
