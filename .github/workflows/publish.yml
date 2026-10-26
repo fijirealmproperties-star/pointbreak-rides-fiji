@@ -4,8 +4,10 @@ name: publish image
 # GitHub Container Registry. Free for public repos; the arm64 runner is native,
 # so `npm ci` and `expo export` are not emulated.
 #
-# On the VM (see DEPLOY-FREE.md section 7):
-#   image: ghcr.io/<you>/pointbreak:latest
+# On the VM (see DEPLOY-FREE.md section 7): the image is named after this repo,
+# lowercase. Put it in an untracked docker-compose.override.yml so `git pull`
+# keeps working, then:
+#   image: ghcr.io/<you>/<repo>:latest
 #   docker compose pull pointbreak-api && docker compose --profile maps up -d --no-build
 
 on:

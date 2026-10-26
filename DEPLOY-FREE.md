@@ -510,15 +510,74 @@ image under emulation.
 
 ### Option B — build locally with buildx
 
+Pick **one** publisher. Option A already writes `:latest` on every push to `main`;
+a manual push writes the same tag, so the two overwrite each other and the running
+image changes without a commit. If you build from a laptop, trim the workflow to
+`on: workflow_dispatch` and keep CI as the fallback.
+
+GitHub Packages accepts **classic** PATs only — fine-grained tokens authenticate
+but cannot push packages. Create one under **Settings → Developer settings →
+Personal access tokens → Tokens (classic)** with the `write:packages` scope
+(`read:packages` comes with it), then:
+
 ```bash
-echo "$CR_PAT" | docker login ghcr.io -u <you> --password-stdin   # PAT: write:packages
-docker buildx build --platform linux/arm64 \
-  -t ghcr.io/<you>/pointbreak-rides-fiji:latest --push .
+read -rs CR_PAT
+: "${CR_PAT:?CR_PAT is empty}"          # stop here, not at --push twenty minutes later
+printf '%s' "$CR_PAT" | docker login ghcr.io -u <you> --password-stdin
 ```
 
-GHCR package names must be lowercase. `--push` is required here: a foreign-arch
-image cannot be loaded into your local Docker. Make the package public (see
-above), or run `docker login ghcr.io` on the VM as well.
+`-u` is your GitHub **account name**, not your email. `read -rs` keeps the token
+out of shell history; the guard matters because an empty variable fails `login`
+and nothing stops the build that follows.
+
+Cross-building arm64 on an amd64 laptop needs three things that are easy to miss:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install arm64   # QEMU; Docker Desktop has it
+docker buildx version                                             # else: sudo apt install docker-buildx
+docker buildx create --name pb --driver docker-container --use     # not the default driver
+```
+
+Without binfmt, `RUN npm ci` dies with `exec format error` a few minutes in.
+Without the plugin, `buildx` is simply not a docker subcommand — Ubuntu's
+`docker.io` does not pull in `docker-buildx` (it is in `universe`). The
+`docker-container` driver keeps the build off the daemon's own architecture; the
+default `docker` driver is tied to it and on some versions refuses the foreign
+platform outright.
+
+Then, from the **repo root** — the final argument is the build context, so a dirty
+tree is what gets built:
+
+```bash
+git status --short                        # empty, or nothing you did not mean to ship
+SHA=$(git rev-parse --short HEAD)
+docker buildx build --platform linux/arm64 \
+  -t ghcr.io/<you>/<repo>:latest \
+  -t ghcr.io/<you>/<repo>:sha-$SHA \
+  --label org.opencontainers.image.revision=$(git rev-parse HEAD) \
+  --push .
+```
+
+`<repo>` is the repository name — `ghcr.io/<you>/pointbreak-rides-fiji`, not
+`ghcr.io/<you>/pointbreak` — and GHCR paths must be lowercase.
+
+Both tags and the label are what make this image behave like CI's afterwards: §5
+rolls back by pinning `:sha-<commit>`, and the `docker inspect` check in the next
+section reads that label. A hand-built image without it answers `<no value>` there
+and looks broken.
+
+`--push` is not optional: a `linux/arm64` image cannot be loaded into an amd64
+daemon (`--load` errors), so the registry is the only way to move it.
+
+A package created by this command starts **private** whatever the repo's
+visibility, so repeat the visibility step above after the first push and prove it
+with the anonymous `docker pull`. Keeping it private also works, but then the VM
+needs its own `docker login` with `read:packages` — and `sudo docker` will not see
+it.
+
+On an amd64 laptop every arm64 step runs under emulation: tens of minutes rather
+than CI's two, and ~4 GB of RAM. On Apple Silicon or an arm64 Linux box it is
+native.
 
 ### On the VM: run the published image
 

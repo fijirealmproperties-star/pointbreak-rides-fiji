@@ -4,6 +4,8 @@ downloads
 mobile/dist
 mobile/dist-check
 mobile/.expo
+.env
+.env.local
 mobile/.env
 mobile/.env.local
 **/*.log
