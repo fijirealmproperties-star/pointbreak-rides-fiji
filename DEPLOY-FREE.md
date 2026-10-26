@@ -593,6 +593,13 @@ services:
 EOF
 ```
 
+`<you>` is literal — substitute your GitHub account name. Docker rejects `<` and
+`>` in an image reference, so leaving the placeholder in fails at `pull` with
+`invalid reference format`, which reads like a syntax problem in your YAML but is
+really the name. The `services:` line is required too: a top-level
+`pointbreak-api:` is rejected as `Additional property pointbreak-api is not
+allowed`.
+
 Then:
 
 ```bash
@@ -627,9 +634,15 @@ override file above is missing or was written in a different directory.
 
 `docker image prune -f` afterwards clears the image this pull replaced.
 
-Use `--no-build` from then on (§5 included). A stray `--build` would try to build
-on the VM again, which is exactly what this section avoids. To update, pull and
-`up -d` again.
+Use `--no-build` from then on (§5 included). The merge leaves **both** keys on the
+service — `build:` from `docker-compose.yml`, `image:` from the override — so a
+stray `--build` does not just waste twenty minutes: it builds locally and tags the
+result `ghcr.io/...:latest`, overwriting the pulled image. From then on a plain
+`up -d` runs your local build while the name still says otherwise, and the revision
+label reads `<no value>`, which is the one signal that catches it. `docker compose
+config` shows the `build:` and `image:` that will actually be used.
+
+To update, pull and `up -d` again.
 
 ## 8. What is still not free (and how to avoid it)
 
