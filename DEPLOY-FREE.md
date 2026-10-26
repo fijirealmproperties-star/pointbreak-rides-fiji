@@ -34,7 +34,7 @@ Oracle Cloud → **Always Free** → Ampere A1 (ARM) is the best fit:
 Pick **Ubuntu 24.04 (aarch64)**. After it boots:
 
 ```bash
-sudo apt update && sudo apt install -y docker.io docker-compose-v2 git curl nodejs
+sudo apt update && sudo apt install -y docker.io docker-compose-v2 git curl nodejs rclone
 sudo usermod -aG docker "$USER"
 ```
 
@@ -46,7 +46,7 @@ instance apt may be holding the dpkg lock while `unattended-upgrades` runs; wait
 minute and re-run. These distro packages are deliberate: Docker CE's own repo
 conflicts with `docker.io`, and nothing here needs anything newer than 24.0.
 `nodejs` is only for `scripts/gen-secrets.js` — the app itself runs in the
-container.
+container — and `rclone` only for the optional off-site copy in §4.
 
 The new group membership applies only to a **new** session, and the command must
 name your user — inside a `sudo -i` shell `$USER` is root and you end up adding
@@ -336,12 +336,77 @@ the stack must have been started once already, or the script stops at `no
 container for pointbreak-api`. If you cannot keep a safety copy at all,
 `FORCE=1 sh scripts/restore.sh …` overrides that check.
 
-Copy `/var/backups/pointbreak` off the box occasionally — a backup on the same
-disk is not a backup. Oracle's Always Free tier includes 10 GB of object storage
-if you want it automated:
+### Off-site copy (Oracle Object Storage)
+
+A backup on the same disk is not a backup. Oracle's Always Free tier includes
+10 GB of object storage — far more than the 14 days kept on the box — and
+`rclone` is installed in §1.
+
+In the console, create the bucket (**Storage → Buckets → Create bucket**) in the
+same region as the VM, since Always Free resources are tied to your home region,
+and leave it **private** (the app database holds real phone numbers). Then make a
+**Customer Secret Key**: *Profile → My profile → Customer secret keys → Add secret
+key*. The key and secret are shown once.
+
+rclone talks to the S3-compatible endpoint, so no OCI SDK config is involved:
+
+```ini
+# ~/.config/rclone/rclone.conf — chmod 600 after creating it: it holds the secret
+[oracle]
+type = s3
+provider = Other
+env_auth = false
+access_key_id = <key>
+secret_access_key = <secret>
+region = ap-sydney-1
+endpoint = https://<namespace>.compat.objectstorage.ap-sydney-1.oraclecloud.com
+acl = private
+```
+
+`<namespace>` is on **Tenancy details → Object Storage settings**; the region in
+the endpoint must match the bucket. `rclone config` builds the same file
+interactively (storage `s3`, provider *Any other S3 compatible provider*).
 
 ```bash
-rclone copy /var/backups/pointbreak oracle:pointbreak-backups   # after `rclone config`
+rclone lsd oracle:                                  # auth works, bucket list
+rclone copy /var/backups/pointbreak oracle:pointbreak-backups
+rclone lsf oracle:pointbreak-backups                # one object per day
+```
+
+(`rclone mkdir oracle:pointbreak-backups` creates the bucket instead, if you
+prefer that to the console — but only ever in the region you configured.)
+
+Then daily. `run-parts` goes alphabetically, so `pointbreak-backup` runs before
+this one and the day's file already exists:
+
+```bash
+RCLONE_CONF="$HOME/.config/rclone/rclone.conf"
+sudo tee /etc/cron.daily/pointbreak-offsite >/dev/null <<EOF
+#!/bin/sh
+rclone --config "$RCLONE_CONF" copy /var/backups/pointbreak oracle:pointbreak-backups >>/var/log/pointbreak-backup.log 2>&1
+EOF
+sudo chmod +x /etc/cron.daily/pointbreak-offsite
+sudo /etc/cron.daily/pointbreak-offsite; sudo tail -n 5 /var/log/pointbreak-backup.log
+```
+
+`--config` is not optional: this runs as root, whose `$HOME` is `/root`, so root's
+rclone has no `oracle:` remote. Without it the upload fails into the log *after*
+the local backup has already reported success — the one failure mode you would
+never notice.
+
+`copy`, never `sync`: `copy` never deletes, so the bucket keeps every daily
+snapshot after the 14-day local prune — that is your long history. Failures are
+otherwise silent, so glance at `rclone lsf oracle:pointbreak-backups | tail -1`
+now and then; `rclone check /var/backups/pointbreak oracle:pointbreak-backups`
+compares hashes if you want proof.
+
+If the disk is gone, restore straight from the bucket (clone the repo again
+first, §3 — `scripts/restore.sh` lives in it):
+
+```bash
+rclone copy oracle:pointbreak-backups/app-2026-10-26.db /tmp/pb/
+sh scripts/restore.sh /tmp/pb/app-2026-10-26.db
+sudo /etc/cron.daily/pointbreak-backup        # repopulate the local history
 ```
 
 ## 5. Updates
