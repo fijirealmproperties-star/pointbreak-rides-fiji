@@ -1,0 +1,17 @@
+**/node_modules
+data
+downloads
+mobile/dist
+mobile/dist-check
+mobile/.expo
+mobile/.env
+mobile/.env.local
+**/*.log
+**/*.db
+*.db
+.git
+.gitignore
+Dockerfile
+.dockerignore
+docker-compose.yml
+pointbreak-rides-fiji.db

@@ -1,0 +1,40 @@
+{
+  "cli": {
+    "version": ">= 12.0.0",
+    "appVersionSource": "remote"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_DEMO": "true"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_DEMO": "true",
+        "EXPO_PUBLIC_API_URL": "http://192.168.0.35:3003"
+      }
+    },
+    "download": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" },
+      "env": {
+        "EXPO_PUBLIC_DEMO": "false",
+        "EXPO_PUBLIC_API_URL": "https://CHANGE-ME.duckdns.org"
+      }
+    },
+    "production": {
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_DEMO": "false"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

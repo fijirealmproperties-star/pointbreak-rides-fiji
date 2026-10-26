@@ -1,0 +1,64 @@
+name: publish image
+
+# Builds the API + web image for the free Ampere VM (arm64) and pushes it to
+# GitHub Container Registry. Free for public repos; the arm64 runner is native,
+# so `npm ci` and `expo export` are not emulated.
+#
+# On the VM (see DEPLOY-FREE.md section 7):
+#   image: ghcr.io/<you>/pointbreak:latest
+#   docker compose pull pointbreak-api && docker compose --profile maps up -d --no-build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - .dockerignore
+      - server/**
+      - web/**
+      - mobile/**
+      - package.json
+      - .github/workflows/publish.yml
+  workflow_dispatch:
+
+concurrency:
+  group: publish-image
+  cancel-in-progress: true
+
+jobs:
+  image:
+    # Native arm64. If your repo is private and arm runners are not available,
+    # use ubuntu-latest and add linux/amd64 below (arm stays emulated).
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Lowercases the owner/repo: Docker rejects uppercase image names.
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

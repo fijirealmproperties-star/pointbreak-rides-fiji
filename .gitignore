@@ -1,0 +1,18 @@
+node_modules/
+mobile/dist/
+mobile/.expo/
+mobile/.env
+mobile/.env.local
+.env
+*.log
+server/data/*.sqlite
+server/data/*.sqlite-journal
+# SQLite databases: dev copies and backups may contain real accounts
+*.db
+*.db.tmp
+# Self-hosted map data (OSM extract, OSRM graph, Nominatim database)
+data/
+# Downloadable builds (Android APK) served by the /download page
+downloads/*
+!downloads/.gitkeep
+mobile/public/downloads/

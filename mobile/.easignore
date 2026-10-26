@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-check/
+.expo/
+.env
+.env.local
+*.log
+android/
+ios/
+tmp_*.js

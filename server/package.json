@@ -1,0 +1,25 @@
+{
+  "name": "pointbreak-rides-fiji",
+  "version": "1.0.0",
+  "description": "Pointbreak Rides Fiji - ride-hailing backend for Fiji",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node server/index.js",
+    "server": "node server/index.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.5.1",
+    "helmet": "^7.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "socket.io": "^4.7.2",
+    "sql.js": "^1.14.1",
+    "uuid": "^9.0.0"
+  }
+}

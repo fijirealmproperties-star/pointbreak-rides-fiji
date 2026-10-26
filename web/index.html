@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pointbreak Rides Fiji — Admin</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-left">
+      <h1>Pointbreak Rides Fiji</h1>
+      <span class="header-subtitle">Admin Dashboard</span>
+    </div>
+    <div class="header-right">
+      <span class="badge" id="connection-status">Connecting...</span>
+    </div>
+  </header>
+
+  <section class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-icon online-icon"></div>
+      <div class="stat-data">
+        <div class="stat-label">Online Drivers</div>
+        <div class="stat-value" id="stat-online">0</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon active-icon"></div>
+      <div class="stat-data">
+        <div class="stat-label">Active Rides</div>
+        <div class="stat-value" id="stat-active">0</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon total-icon"></div>
+      <div class="stat-data">
+        <div class="stat-label">Total Rides</div>
+        <div class="stat-value" id="stat-total">0</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon revenue-icon"></div>
+      <div class="stat-data">
+        <div class="stat-label">Revenue</div>
+        <div class="stat-value" id="stat-revenue">FJ$0</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="admin-section">
+    <div class="section-header">
+      <h2>Admin</h2>
+      <span class="register-status" id="admin-status"></span>
+    </div>
+    <div id="admin-auth" class="admin-auth">
+      <input id="adm-phone" class="reg-input" placeholder="Admin phone (e.g. +679…)" autocomplete="off" />
+      <input id="adm-password" class="reg-input" type="password" placeholder="Admin password" autocomplete="off" />
+      <button class="reg-btn" onclick="adminLogin()">Sign in</button>
+      <span class="admin-hint">Default admin: +6790000000 / admin123</span>
+    </div>
+    <div id="admin-bar" class="admin-bar" style="display:none">
+      <span id="admin-name" class="admin-name"></span>
+      <button class="reg-btn reg-btn-ghost" onclick="adminLogout()">Sign out</button>
+    </div>
+  </section>
+
+  <section class="register-section">
+    <div class="section-header">
+      <h2>Register Driver</h2>
+      <span class="register-status" id="reg-status"></span>
+    </div>
+    <div class="register-row">
+      <input id="reg-name" class="reg-input" placeholder="Full name" autocomplete="off" />
+      <input id="reg-phone" class="reg-input" placeholder="Phone (e.g. +679…)" autocomplete="off" />
+      <input id="reg-password" class="reg-input" type="password" placeholder="Password" autocomplete="off" />
+      <input id="reg-vehicle-type" class="reg-input" placeholder="Vehicle type (e.g. Taxi)" autocomplete="off" />
+      <input id="reg-vehicle-model" class="reg-input" placeholder="Vehicle model (e.g. Toyota RAV4)" autocomplete="off" />
+      <input id="reg-plate" class="reg-input" placeholder="License plate (e.g. FM 1234)" autocomplete="off" />
+      <button id="reg-submit" class="reg-btn" onclick="registerDriver()">Create driver</button>
+    </div>
+  </section>
+
+  <main>
+    <section class="rides-section">
+      <div class="section-header">
+        <h2>Live Rides</h2>
+        <span class="ride-count" id="ride-count">0 rides</span>
+      </div>
+      <div id="rides-list" class="rides-list">
+        <p class="empty">No rides yet. Open the app to start a ride.</p>
+      </div>
+    </section>
+
+    <aside class="drivers-section">
+      <div class="section-header">
+        <h2>Drivers</h2>
+        <span class="driver-count" id="driver-count">0 drivers</span>
+      </div>
+      <div id="drivers-list" class="drivers-list">
+        <p class="empty">Loading drivers...</p>
+      </div>
+    </aside>
+  </main>
+
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

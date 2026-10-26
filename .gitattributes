@@ -1,0 +1,2 @@
+# Deploy scripts run on Linux; a CRLF checkout breaks them ("$'\r': command not found").
+* text=auto eol=lf

@@ -1,0 +1,3 @@
+Keeps downloads/ present (and owned by you) after a fresh clone, so
+`docker compose up` does not create it as root and break `cp` into it.
+The APK itself is gitignored.

@@ -1,0 +1,104 @@
+services:
+  pointbreak-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Optional: override the basemap style for the web build.
+        EXPO_PUBLIC_MAP_STYLE_URL: ${EXPO_PUBLIC_MAP_STYLE_URL:-}
+    container_name: pointbreak-rides-fiji
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      PORT: 3003
+      DB_PATH: /app/data/pointbreak-rides-fiji.db
+      MOBILE_WEB_DIR: /app/mobile-web
+    ports:
+      - "127.0.0.1:${PORT:-3003}:3003"
+    volumes:
+      - pointbreak_data:/app/data
+      # Optional downloadables (Android APK) for the /download page. Drop the
+      # file at downloads/pointbreak.apk on the host; no rebuild needed.
+      - ./downloads:/app/mobile-web/downloads:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3003/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: pointbreak-caddy
+    restart: unless-stopped
+    depends_on:
+      - pointbreak-api
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      SITE_DOMAIN: ${SITE_DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ---- Self-hosted map services (optional, free, no API keys) --------------
+  # Enable with:  docker compose --profile maps up -d --build
+  # Prepare the data once with:  ./scripts/prepare-fiji-maps.sh
+  # The API picks these up from .env: OSRM_URL / NOMINATIM_URL.
+  # Routing and geocoding degrade gracefully (straight-line route, "Dropped
+  # pin" label) if these are not running, so the base stack still works
+  # without them.
+  osrm:
+    profiles: ["maps"]
+    image: ghcr.io/project-osrm/osrm-backend:latest
+    container_name: pointbreak-osrm
+    restart: unless-stopped
+    command: osrm-routed --algorithm mld /data/fiji-latest.osrm
+    volumes:
+      - ./data/osrm:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+  nominatim:
+    profiles: ["maps"]
+    image: mediagis/nominatim:5.3
+    container_name: pointbreak-nominatim
+    restart: unless-stopped
+    environment:
+      PBF_PATH: /data/fiji-latest.osm.pbf
+      IMPORT_WIKIPEDIA: "false"
+      IMPORT_US_POSTCODES: "false"
+      IMPORT_GB_POSTCODES: "false"
+      THREADS: "2"
+      POSTGRES_SHARED_BUFFERS: 256MB
+      NOMINATIM_PASSWORD: ${NOMINATIM_PASSWORD:-pointbreak-nominatim}
+    volumes:
+      - ./data:/data
+      - ./data/nominatim:/var/lib/postgresql/16/main
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "2"
+
+volumes:
+  pointbreak_data:
+  caddy_data:
+  caddy_config:

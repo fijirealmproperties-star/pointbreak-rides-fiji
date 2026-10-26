@@ -1,0 +1,13 @@
+{
+  "name": "pointbreak-rides-fiji",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pointbreak Rides Fiji — run the API, rider web app and driver web app together",
+  "scripts": {
+    "dev": "node scripts/dev.js",
+    "api": "node server/index.js",
+    "web:rider": "npx --yes serve@14.2.1 -l 8082 mobile/dist",
+    "web:driver": "npx --yes serve@14.2.1 -l 8083 mobile/dist",
+    "build:web": "npm --prefix mobile run export"
+  }
+}

@@ -1,0 +1,24 @@
+# Pointbreak Rides Fiji — HTTPS reverse proxy.
+#
+# Set SITE_DOMAIN in .env (e.g. app.pointbreakrides.com) and Caddy obtains and
+# renews a Let's Encrypt certificate automatically. ACME_EMAIL is recommended.
+# For plain HTTP on a bare IP during testing, set SITE_DOMAIN=http://1.2.3.4
+# (Caddy skips ACME for explicit http:// addresses).
+{
+	email {$ACME_EMAIL}
+}
+
+{$SITE_DOMAIN:localhost} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(self), microphone=(), camera=()"
+		-Server
+	}
+
+	# API, rider/driver web app and /admin dashboard (served by the Node app)
+	reverse_proxy pointbreak-api:3003
+}
