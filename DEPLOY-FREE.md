@@ -781,9 +781,9 @@ curl -sI https://<SITE_DOMAIN>/downloads/pointbreak.apk | grep -iE '^HTTP/|conte
 wc -c < pointbreak.apk      # must equal content-length (on the VM: downloads/pointbreak.apk)
 ```
 
-(`head -n 3` is not enough here: the first headers are caching ones — `date`,
-`accept-ranges`, `cache-control`, `etag` — so the two that matter fall off the
-end.)
+(`head -n 3` would show the status plus `accept-ranges` and `cache-control`;
+`content-type` and `content-length` are the sixth and seventh headers, and Caddy
+adds its own on top of that.)
 
 A missing file is **not** a 404: the SPA fallback answers every unknown path with
 `index.html`, so the first line still reads `HTTP/2 200`. The status alone proves
