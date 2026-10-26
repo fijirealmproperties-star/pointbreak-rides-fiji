@@ -243,10 +243,26 @@ not up or `NOMINATIM_URL` / `OSRM_URL` are wrong.
 Manual checks, if you prefer:
 
 ```bash
-# routing:  (needs a login token)
-# geocoding:
-docker compose exec nominatim curl -s "http://localhost:8080/reverse?format=jsonv2&lat=-17.75&lon=177.44" | head -c 300
+# geocoding (Nominatim) — only answers once the import has finished
+docker compose exec nominatim curl -sS \
+  "http://localhost:8080/reverse?format=jsonv2&lat=-17.7765&lon=177.4356"
+
+# routing (OSRM) — from the API container, over the same hostname the app uses
+docker compose exec pointbreak-api wget -qO- \
+  "http://osrm:5000/route/v1/driving/177.4356,-17.7765;177.4194,-17.6841?overview=false"
 ```
+
+The first must contain a `display_name`; until the import completes it is a
+connection error, not a wrong answer. The second must say `"code":"Ok"` with a
+`distance` around 11–13 km: `"code":"NoRoute"` means the graph is missing or was
+built from the wrong PBF, and a refused connection means the container is not up
+(`docker compose --profile maps ps`). OSRM takes **longitude first** — swapped
+coordinates come back as `InvalidQuery`, not a route in the sea.
+
+`wget` is used for the second because the API image's healthcheck already proves
+it exists (busybox), and it resolves `osrm` exactly as `OSRM_URL` does. The
+API-level version of both checks — auth token, `"routed":true`, fare — is what
+`smoke-test.sh` sections 4 and 5 do.
 
 The rider/driver web app is at `/`, the admin dashboard at `/admin`.
 
