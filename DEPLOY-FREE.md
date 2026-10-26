@@ -444,7 +444,7 @@ and the scripts still come from git — but skip the build; the image carries th
 app code:
 
 ```bash
-docker compose pull pointbreak-api
+docker compose pull pointbreak-api && \
 docker compose --profile maps up -d --no-build
 ```
 
@@ -603,9 +603,20 @@ allowed`.
 Then:
 
 ```bash
-docker compose pull pointbreak-api
+docker compose pull pointbreak-api && \
 docker compose --profile maps up -d --no-build
 ```
+
+`&&`, not a second line. When a pull fails, this service does not stop the command —
+it still carries `build:`, so Compose downgrades the error to a warning and prints
+`Some service image(s) must be built from source ... docker compose build
+pointbreak-api`, which is the wrong advice here. The exit code is still non-zero, so
+`&&` is what keeps a failed refresh from being followed by "success".
+
+The explicit `pull` is not redundant: `up` never refreshes an image that is already
+present, so without it you just recreate the container on the build you already
+have. `:latest` is the one tag Compose's default pull policy always re-fetches, so
+this is the command that actually moves you forward.
 
 Prove what is actually running — the image is labelled with the commit it was
 built from:
@@ -627,10 +638,19 @@ This image is `linux/arm64` only (it is built on a native arm64 runner). On an
 amd64 host — the 2× micro from §1 — `pull` stops with `no matching manifest for
 linux/amd64`; that box must build its own (§5) or publish both architectures.
 
-`pull access denied` for a name shaped like `pointbreak-pointbreak-api` — the
-name Compose would give a local build, rather than `ghcr.io/...` — means the
-override file above is missing or was written in a different directory.
-`docker compose config | grep 'image:'` shows what each service will really pull.
+Two failures look alike and are not:
+
+- **Override missing or in the wrong directory.** The tracked service has only
+  `build:`, so `pull` has nothing to ask for: it prints `Skipped - No image to be
+  pulled` and **exits 0**. The next command is the one that fails, creating a
+  container from an image that was never built (`No such image:
+  pointbreak-pointbreak-api`).
+- **Override present, wrong name.** Now the name is well-formed, so GHCR really is
+  asked and refuses: `denied: requested access to the resource is denied` — the
+  package does not exist under that path, or is private.
+
+`docker compose config | grep 'image:'` separates them in one line: the first case
+shows no `image:` for `pointbreak-api` at all.
 
 `docker image prune -f` afterwards clears the image this pull replaced.
 
