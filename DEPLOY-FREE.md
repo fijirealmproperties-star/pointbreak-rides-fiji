@@ -755,8 +755,16 @@ curl -L -o pointbreak.apk "<artifact URL>"
 scp pointbreak.apk you@vm:pointbreak/downloads/pointbreak.apk
 ```
 
-The remote path is relative to the login user's home, i.e. the `pointbreak` clone
-from §3 — adjust it if you cloned somewhere else.
+The remote path is relative to the login user's home — the `pointbreak` clone from
+§3, so `~/pointbreak/downloads/` means the same thing. If your clone lives
+somewhere else, every path in §4 and §5 moves with it (the cron job's `APP_DIR`,
+`cd ~/pointbreak`), and a root-owned location like `/opt/pointbreak` cannot be
+written by `scp` as an ordinary user: `Permission denied` on a path that looks
+perfectly correct.
+
+If `pointbreak.apk` came out a few kilobytes rather than tens of megabytes, you
+have an error page, not an APK — the artifact URL expired (30 days) or it was the
+build page's HTML rather than the artifact. That is what the check below is for.
 
 `downloads/` is in the repo (kept by `.gitkeep`) and Compose mounts it read-only
 into the web root, so the button on `/download` becomes **Download APK** on the
@@ -766,15 +774,24 @@ on an older checkout, `sudo chown -R "$USER" downloads` once.
 Check it:
 
 ```bash
-curl -sI https://<SITE_DOMAIN>/downloads/pointbreak.apk | head -n 3
+curl -sI https://<SITE_DOMAIN>/downloads/pointbreak.apk | grep -iE '^HTTP/|content-type|content-length'
 # HTTP/2 200
 # content-type: application/vnd.android.package-archive
 # content-length: <bytes>
+wc -c < pointbreak.apk      # must equal content-length (on the VM: downloads/pointbreak.apk)
 ```
 
-A 404 whose body is `text/html` means the file is not where Compose looks —
-copied into `mobile/dist/downloads/` (the direct-run location) instead of
-`downloads/`, or the name is not exactly `pointbreak.apk`.
+(`head -n 3` is not enough here: the first headers are caching ones — `date`,
+`accept-ranges`, `cache-control`, `etag` — so the two that matter fall off the
+end.)
+
+A missing file is **not** a 404: the SPA fallback answers every unknown path with
+`index.html`, so the first line still reads `HTTP/2 200`. The status alone proves
+nothing — the `content-type` and the length do. `text/html` there means the file is
+not where Compose looks: copied into `mobile/dist/downloads/` (the direct-run
+location) instead of `downloads/`, or named anything other than
+`pointbreak.apk`. The `/download` page runs the same HEAD probe, so it keeps the
+button disabled rather than offering a download that is really the app shell.
 
 APKs do not self-update: replace the file and bump `version` in
 `mobile/app.config.js` when you ship a new one. Android installs it over the old

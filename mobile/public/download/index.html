@@ -188,9 +188,11 @@
     var hint = document.getElementById("apkHint");
     fetch(apk.getAttribute("href"), { method: "HEAD" })
       .then(function (res) {
-        // A missing file falls through to the SPA shell (text/html) — ignore it.
+        // A missing file falls through to the SPA shell (text/html) — ignore it,
+        // and ignore empty or truncated uploads too: a real APK is tens of MB.
         var type = res.headers.get("content-type") || "";
-        if (!res.ok || /text\/html/i.test(type)) return;
+        var size = Number(res.headers.get("content-length") || 0);
+        if (!res.ok || /text\/html/i.test(type) || size < 1048576) return;
         apk.classList.remove("is-disabled");
         apk.textContent = "Download APK";
         hint.textContent = "Tap the downloaded file to install. Android may ask you to allow installs from this site.";
