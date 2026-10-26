@@ -200,12 +200,17 @@ graph is left alone.
 
 The first `--build` compiles the Expo web bundle inside the image and the first
 start imports the Fiji extract into Nominatim — a few minutes each on one OCPU.
-Watch progress with:
+Watch both at once (Ctrl-C stops the log view, not the containers):
 
 ```bash
-docker compose --profile maps logs -f nominatim
-docker compose --profile maps logs -f pointbreak-api
+docker compose --profile maps logs -f --tail 50 nominatim pointbreak-api
 ```
+
+`logs` takes **service** names (`nominatim`, `pointbreak-api`), not the
+`container_name` — `docker compose logs pointbreak-rides-fiji` says "no such
+service"; for that name use `docker logs -f pointbreak-rides-fiji`. Two separate
+`logs -f` lines pasted together do not work either: the first one blocks, so the
+second never starts until you interrupt it.
 
 Until the import finishes, reverse geocoding answers `"Dropped pin"` and fares
 use straight-line distance; both start working on their own once it completes,
