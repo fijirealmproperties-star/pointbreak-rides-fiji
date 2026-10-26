@@ -322,10 +322,13 @@ and pushes to GHCR on every push to `main`:
 
 ```bash
 # one-time: make the image public so the VM can pull it without logging in
-# GitHub -> your profile -> Packages -> pointbreak -> Package settings -> Change visibility
+# GitHub -> your profile -> Packages -> <repo> -> Package settings -> Change visibility
 ```
 
-Nothing else to do; `latest` is updated by CI. If arm64 runners are not
+Nothing else to do; `latest` is updated by CI. The image name is the repository
+name in lowercase — `ghcr.io/<you>/<repo>:latest`, i.e.
+`ghcr.io/fijirealmproperties-star/pointbreak-rides-fiji:latest` for this copy —
+not the `pointbreak` name used in the examples below. If arm64 runners are not
 available to you (private repo), change `runs-on` to `ubuntu-latest` and
 `platforms` to `linux/amd64,linux/arm64` — slower, because amd64 builds the arm
 image under emulation.
@@ -335,7 +338,7 @@ image under emulation.
 ```bash
 echo "$CR_PAT" | docker login ghcr.io -u <you> --password-stdin   # PAT: write:packages
 docker buildx build --platform linux/arm64 \
-  -t ghcr.io/<you>/pointbreak:latest --push .
+  -t ghcr.io/<you>/pointbreak-rides-fiji:latest --push .
 ```
 
 GHCR package names must be lowercase. `--push` is required here: a foreign-arch
@@ -349,7 +352,7 @@ one line:
 
 ```yaml
   pointbreak-api:
-    image: ghcr.io/<you>/pointbreak:latest
+    image: ghcr.io/<you>/pointbreak-rides-fiji:latest
 ```
 
 Then:
