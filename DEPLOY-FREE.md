@@ -474,12 +474,31 @@ else and let the VM pull it.
 ### Option A — GitHub Actions (free for public repos)
 
 `.github/workflows/publish.yml` builds `linux/arm64` natively on an arm64 runner
-and pushes to GHCR on every push to `main`:
+and pushes to GHCR on every push to `main`.
+
+**Once**, make the package public so the VM can pull it with no credentials. It is
+not under a "Packages" tab named after the app — GitHub names the package after the
+**repo**:
+
+1. Open the package page: the repo's right-hand sidebar → **Packages**, or
+   `https://github.com/<you>/<repo>/pkgs/container/<repo>` (for this copy,
+   `https://github.com/fijirealmproperties-star/pointbreak-rides-fiji/pkgs/container/pointbreak-rides-fiji`).
+2. **Package settings** → **Danger zone** → **Change visibility** → **Public**, and
+   type the package name to confirm.
+
+That page is instructions, not a command — pasting the comments into a shell does
+nothing. Prove it from a machine with no GitHub credentials:
 
 ```bash
-# one-time: make the image public so the VM can pull it without logging in
-# GitHub -> your profile -> Packages -> <repo> -> Package settings -> Change visibility
+docker logout ghcr.io 2>/dev/null || true
+docker pull ghcr.io/<you>/<repo>:latest
 ```
+
+`unauthorized` or `denied` means the package is still private, or the owner in the
+image path is not the owner of the package. Keeping it private is fine too, but
+then `docker login ghcr.io -u <you> -p <PAT with read:packages>` on the VM — and
+note that `sudo docker` does not see that login, and the credential it stores in
+`~/.docker/config.json` is base64, not encrypted.
 
 Nothing else to do; `latest` is updated by CI. The image name is the repository
 name in lowercase — `ghcr.io/<you>/<repo>:latest`, i.e.
