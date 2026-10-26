@@ -272,17 +272,25 @@ Everything that matters is the one SQLite file in the `pointbreak_data` volume.
 The map data in `data/` is re-downloadable, and Caddy re-issues certificates, so
 they are not worth backing up.
 
-Install the daily job (the file must be executable and have no extension —
-`run-parts` skips anything else):
+Install the daily job. Cron runs as root from `/` with a minimal `PATH`, so the
+script path must be absolute — `scripts/backup.sh` `cd`s to the repo itself, so
+`docker compose` still finds the compose file. The file must also be executable
+and have no extension: `run-parts` skips anything else.
 
 ```bash
-sudo tee /etc/cron.daily/pointbreak-backup >/dev/null <<'EOF'
+APP_DIR="$HOME/pointbreak"          # where you cloned it; re-run this if you move it
+sudo tee /etc/cron.daily/pointbreak-backup >/dev/null <<EOF
 #!/bin/sh
-exec sh /opt/pointbreak/scripts/backup.sh >>/var/log/pointbreak-backup.log 2>&1
+exec sh "$APP_DIR/scripts/backup.sh" >>/var/log/pointbreak-backup.log 2>&1
 EOF
 sudo chmod +x /etc/cron.daily/pointbreak-backup
-sudo /etc/cron.daily/pointbreak-backup && tail -n 3 /var/log/pointbreak-backup.log
+
+sudo docker compose version        # root must see compose too; cron has no ~/.docker
+sudo /etc/cron.daily/pointbreak-backup; sudo tail -n 3 /var/log/pointbreak-backup.log
 ```
+
+Note the `;` rather than `&&` before `tail`: when the backup fails, that log is
+the only place the reason appears.
 
 `scripts/backup.sh` writes `/var/backups/pointbreak/app-YYYY-MM-DD.db`, keeps 14
 days, and never stops the app. It copies the file inside the container first
@@ -455,8 +463,11 @@ filename matters:
 # cloud build: EAS prints an artifact URL (the build page has a download button);
 # `eas build --local` instead leaves build-<timestamp>.apk in mobile/.
 curl -L -o pointbreak.apk "<artifact URL>"
-scp pointbreak.apk you@vm:/opt/pointbreak/downloads/pointbreak.apk
+scp pointbreak.apk you@vm:pointbreak/downloads/pointbreak.apk
 ```
+
+The remote path is relative to the login user's home, i.e. the `pointbreak` clone
+from §3 — adjust it if you cloned somewhere else.
 
 `downloads/` is in the repo (kept by `.gitkeep`) and Compose mounts it read-only
 into the web root, so the button on `/download` becomes **Download APK** on the
