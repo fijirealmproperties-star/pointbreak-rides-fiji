@@ -7,19 +7,23 @@ Everything this app needs runs on one free VM with no paid APIs:
 | App + HTTPS | Node/sql.js/Socket.IO in Docker, Caddy + Let's Encrypt | $0 |
 | Road routing (fares, route lines) | Self-hosted **OSRM** with the Fiji OSM extract | $0 |
 | Reverse geocoding ("pin → street") | Self-hosted **Nominatim** with the same extract | $0 |
-| Basemap | **OpenFreeMap** vector tiles via MapLibre GL (no key, no limits) | $0 |
-| Server | Oracle Cloud **Always Free** (Ampere A1: 4 OCPU / 24 GB) | $0 |
+| Basemap | **OpenFreeMap** vector tiles via MapLibre GL (no key, no account) | $0 |
+| Server | Oracle Cloud **Always Free** (Ampere A1: 2 OCPU / 12 GB) | $0 |
 | Domain | DuckDNS subdomain (or `sslip.io` with the raw IP) | $0 |
-| Push/builds | Expo Push; `expo run:android` / `eas build --local` | $0 |
+| Push/builds | Expo Push; EAS cloud builds (free monthly quota) | $0 |
 | Distribution | Installable **PWA** — `/` is the app, `/download` is the install page | $0 |
 
 The only optional paid items are the app stores (Google Play US$25 once, Apple
-US$99/year) and a custom `.fj`/`.com` domain. Skip both by shipping the PWA.
+US$99/year) and a custom domain (`.com` ~US$10–20/yr; `.fj`/`.com.fj` is
+US$150+/yr). Skip both by shipping the PWA.
 
-Why self-host the maps? The public OSM/Nominatim/OSRM demo servers are not
-licensed for production, and commercial map providers (MapTiler, Stadia, CARTO,
-Mapbox…) require a paid plan for commercial use. Self-hosting is the only
-combination that is both free and allowed for a business.
+Why self-host routing and geocoding? The public OSM tile, Nominatim, and OSRM
+demo servers are best-effort — rate-limited, no SLA, and access can be withdrawn
+— so they are not something to launch a business on, and the commercial map
+providers (Mapbox, MapTiler, Stadia, CARTO) meter requests and can bill you for
+the overage. This guide removes both problems: OSRM and Nominatim run on the VM,
+and the basemap comes from OpenFreeMap, which is free for commercial use with
+attribution (see Notes).
 
 ---
 
@@ -27,7 +31,10 @@ combination that is both free and allowed for a business.
 
 Oracle Cloud → **Always Free** → Ampere A1 (ARM) is the best fit:
 
-- 4 OCPU / 24 GB RAM is enough to build the app image *and* run Nominatim.
+- 2 OCPU / 12 GB RAM — the Always Free allowance since June 2026, when Oracle
+  halved it from 4 OCPU / 24 GB — is enough to build the app image *and* run
+  Nominatim. If your free account already has a larger instance, Oracle stops it
+  (not deletes it) until you resize the shape; the boot volume comes back with it.
 - 2 × AMD micro instances (1 GB each) also work, but you must build the image
   elsewhere (see §7) and skip Nominatim.
 
@@ -77,8 +84,12 @@ are open and it still times out, some Oracle images also ship a persistent
 iptables ruleset that survives ufw — check `sudo iptables -L INPUT -n` for a
 REJECT rule.
 
-> Oracle reclaims idle Always Free instances. Keep the app running (it is), and
-> don't leave the instance stopped for long periods.
+> Oracle can reclaim an Always Free instance that is idle for seven days: CPU
+> (95th percentile), network, and — on A1 — memory all below 20%. A quiet app can
+> meet that even while it is running, so "keep it up" is not protection; the
+> off-site copy in §4 and a repo that recreates the stack are. "Out of host
+> capacity" at creation is also normal for A1 — try another availability domain
+> or wait rather than upgrading the account.
 
 ## 2. Point a free hostname at it
 
@@ -201,7 +212,8 @@ build context. Re-running it is safe: the download is reused and an existing
 graph is left alone.
 
 The first `--build` compiles the Expo web bundle inside the image and the first
-start imports the Fiji extract into Nominatim — a few minutes each on one OCPU.
+start imports the Fiji extract into Nominatim — several minutes each on the
+2-OCPU shape.
 Watch both at once (Ctrl-C stops the log view, not the containers):
 
 ```bash
@@ -420,8 +432,8 @@ docker compose --profile maps up -d --build
 `--ff-only` makes a locally edited checkout stop instead of turning the pull into
 a merge commit that every later pull has to untangle. The build runs before any
 container is replaced, so a broken build leaves the running app alone; the
-downtime is just the recreate, a few seconds. Expect several minutes on one OCPU
-— a 1 GB AMD micro cannot do this, which is what §7 is for.
+downtime is just the recreate, a few seconds. Expect several minutes on the free
+2-OCPU shape — a 1 GB AMD micro cannot do this at all, which is what §7 is for.
 
 Then prove it came back, and reclaim the disk:
 
@@ -668,11 +680,18 @@ To update, pull and `up -d` again.
 
 | Item | Cost | Free alternative |
 | --- | --- | --- |
-| Google Play listing | US$25 once | Ship the PWA |
-| Apple App Store | US$99/yr | Ship the PWA |
-| Custom domain | ~US$10–20/yr | DuckDNS / sslip.io |
-| SMS login | varies | Already phone + password (no SMS) |
-| Paid map APIs | $/month | This setup |
+| Google Play listing | US$25 once | Ship the PWA (§9) |
+| Apple App Store / TestFlight | US$99/yr | Add to Home Screen (§9) |
+| Custom `.com` domain | ~US$10–20/yr | DuckDNS / sslip.io |
+| Custom `.fj` / `.com.fj` domain | ~US$150+/yr | DuckDNS / sslip.io |
+| More than 2 OCPU / 12 GB on Oracle | billed hourly (paid account) | stay inside the Always Free shape (§1) |
+| SMS login | varies | already phone + password (no SMS) |
+| Paid map APIs | $/month | this setup |
+
+Free is not the same as guaranteed. OpenFreeMap's public instance is free for
+commercial use but runs without an SLA and may be discontinued; Oracle can reclaim
+an idle Always Free instance (§1). The off-site copy in §4 and a repo that
+recreates the stack are the mitigation for both.
 
 ## 9. Distribution — no app store needed
 
@@ -799,8 +818,29 @@ app as long as it is signed with the same key (EAS keeps that key for you).
 
 ## Notes
 
-- Attribution is required by the ODbL: keep the OpenStreetMap credit that
-  OpenFreeMap's style renders, and Nominatim's data credit in the app.
-- Nominatim is for this app only. Don't expose it as a public geocoder.
+- Attribution is required: OpenFreeMap's terms ask for © OpenMapTiles and "Data
+  from OpenStreetMap" (the OpenFreeMap link itself is optional but nice). The
+  `liberty` style JSON carries no credit at all — it arrives with the TileJSON at
+  `tiles.openfreemap.org/planet` — and `maplibre-gl-leaflet` copies it into
+  Leaflet's attribution control once the map loads, so the control ends up
+  reading "Leaflet | OpenFreeMap © OpenMapTiles Data from OpenStreetMap". Keep
+  that control visible; the raster fallback adds the OpenStreetMap credit itself.
+- Nominatim is for this app only. Compose publishes no port for it and Caddy only
+  proxies the API, so it is already private — don't add a public route to it. The
+  public `nominatim.openstreetmap.org` allows an absolute maximum of 1 request per
+  second and is not a substitute at any real volume.
 - `NOMINATIM_PASSWORD` in `.env` only protects the internal Postgres user; it
   is never reachable from outside the Docker network.
+- OpenFreeMap's public instance is free for commercial use, but it has no SLA and
+  may be discontinued. Its terms also cap *offline* downloads at 3,000 tiles or
+  50 MB each, with at most 4 parallel requests and an identifying User-Agent; this
+  app does not cache tiles, so that does not apply. To remove the dependency,
+  point `EXPO_PUBLIC_MAP_STYLE_URL` at a self-hosted style — it is a build arg, so
+  that needs a rebuild, not a restart.
+- The raster fallback in `mapShared.ts` is `tile.openstreetmap.org`. OSM's tile
+  policy allows normal interactive viewing but requires attribution and a
+  User-Agent that names the app — a browser sends its own, while the APK's WebView
+  sends the system UA unless you set its `userAgent` prop — and forbids offline or
+  bulk fetching. Treat it as the no-WebGL safety net, not the basemap for a
+  commercial launch: self-host raster tiles, or point
+  `EXPO_PUBLIC_TILE_URL_TEMPLATE` at a provider whose terms allow it.

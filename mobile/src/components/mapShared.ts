@@ -21,8 +21,10 @@ export interface MapVehicle {
 }
 
 // Basemap. The default is OpenFreeMap's public vector style: free, no API key,
-// no request limits, no account — see https://openfreemap.org. It is served as
-// vector tiles over MapLibre GL, rendered inside Leaflet (see MapView).
+// no quota, commercial use allowed with attribution — see
+// https://openfreemap.org. No SLA, though: self-host a style if that matters.
+// It is served as vector tiles over MapLibre GL, rendered inside Leaflet (see
+// MapView).
 //
 // Self-hosting instead? Build a Fiji-only style (Planetiler or Planetiler-based
 // PMTiles exported with `pmtiles`/a static style JSON) and point
