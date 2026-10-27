@@ -186,16 +186,28 @@
     // Only enable the APK button if the file is actually published.
     var apk = document.getElementById("apk");
     var hint = document.getElementById("apkHint");
+
+    // A missing file falls through to the SPA shell (text/html) — ignore it, and
+    // ignore empty or truncated uploads too: a real APK is tens of MB.
+    function enableIfReal(type, size) {
+      if (/text\/html/i.test(type) || size < 1048576) return false;
+      apk.classList.remove("is-disabled");
+      apk.textContent = "Download APK";
+      hint.textContent = "Tap the downloaded file to install. Android may ask you to allow installs from this site.";
+      return true;
+    }
+
+    // HEAD is the cheap probe, but some proxies and tunnels drop it. Fall back to
+    // a one-byte ranged GET, whose Content-Range carries the real file size.
     fetch(apk.getAttribute("href"), { method: "HEAD" })
       .then(function (res) {
-        // A missing file falls through to the SPA shell (text/html) — ignore it,
-        // and ignore empty or truncated uploads too: a real APK is tens of MB.
-        var type = res.headers.get("content-type") || "";
-        var size = Number(res.headers.get("content-length") || 0);
-        if (!res.ok || /text\/html/i.test(type) || size < 1048576) return;
-        apk.classList.remove("is-disabled");
-        apk.textContent = "Download APK";
-        hint.textContent = "Tap the downloaded file to install. Android may ask you to allow installs from this site.";
+        if (res.ok && enableIfReal(res.headers.get("content-type") || "", Number(res.headers.get("content-length") || 0))) return;
+        return fetch(apk.getAttribute("href"), { headers: { Range: "bytes=0-0" } })
+          .then(function (r2) {
+            var range = r2.headers.get("content-range") || "";
+            var total = Number((range.split("/")[1] || "0").trim());
+            enableIfReal(r2.headers.get("content-type") || "", total);
+          });
       })
       .catch(function () {});
   })();

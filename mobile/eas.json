@@ -24,7 +24,7 @@
       "android": { "buildType": "apk" },
       "env": {
         "EXPO_PUBLIC_DEMO": "false",
-        "EXPO_PUBLIC_API_URL": "https://CHANGE-ME.duckdns.org"
+        "EXPO_PUBLIC_API_URL": "https://washing-vital-ministry-runtime.trycloudflare.com"
       }
     },
     "production": {
