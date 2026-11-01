@@ -263,6 +263,105 @@ function renderAll() {
   renderStats();
   renderRides();
   renderDrivers();
+  renderMap();
+}
+
+const ACTIVE_RIDE_STATUSES = ['requested', 'accepted', 'arrived', 'picking_up', 'in_progress'];
+let liveMap = null;
+let mapLayer = null;
+let mapFitted = false;
+let openPopupKey = null;
+
+function initMap() {
+  if (liveMap || typeof L === 'undefined') return;
+  liveMap = L.map('live-map').setView([-17.75, 177.9], 8);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors',
+  }).addTo(liveMap);
+  mapLayer = L.layerGroup().addTo(liveMap);
+}
+
+function emojiIcon(emoji) {
+  return L.divIcon({
+    className: 'map-emoji',
+    html: `<span>${emoji}</span>`,
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -16],
+  });
+}
+
+function validPoint(lat, lng) {
+  return typeof lat === 'number' && typeof lng === 'number' && isFinite(lat) && isFinite(lng) && !(lat === 0 && lng === 0);
+}
+
+function renderMap() {
+  initMap();
+  if (!liveMap) return;
+  const keepKey = openPopupKey;
+  mapLayer.clearLayers();
+  openPopupKey = keepKey;
+  const points = [];
+  let reopen = null;
+  const addMarker = (key, lat, lng, emoji, html) => {
+    const m = L.marker([lat, lng], { icon: emojiIcon(emoji) }).bindPopup(html).addTo(mapLayer);
+    m.on('popupopen', () => { openPopupKey = key; });
+    m.on('popupclose', () => { if (openPopupKey === key) openPopupKey = null; });
+    if (openPopupKey === key) reopen = m;
+  };
+  const activeRides = rides.filter(r => ACTIVE_RIDE_STATUSES.includes(r.status));
+  const rideByDriver = {};
+  activeRides.forEach(r => { if (r.driver_id) rideByDriver[r.driver_id] = r; });
+
+  drivers.filter(d => d.status !== 'offline' && validPoint(d.lat, d.lng)).forEach(d => {
+    const ride = rideByDriver[d.id];
+    const vehicle = [d.vehicle_type, d.vehicle_model].filter(Boolean).join(' ');
+    const html = `
+      <div class="map-popup">
+        <strong>${escapeHtml(d.full_name || d.name || 'Driver')}</strong>
+        <div>Status: ${escapeHtml(d.status || 'unknown')}</div>
+        ${d.phone ? `<div>Phone: ${escapeHtml(d.phone)}</div>` : ''}
+        ${vehicle ? `<div>Vehicle: ${escapeHtml(vehicle)}</div>` : ''}
+        ${d.license_plate ? `<div>Plate: ${escapeHtml(d.license_plate)}</div>` : ''}
+        <div>Rating: ${escapeHtml(d.rating != null ? Number(d.rating).toFixed(1) : '5.0')} &middot; ${d.trips || 0} trips</div>
+        ${ride ? `<div class="map-popup-ride">On ride: ${escapeHtml(ride.pickup_place || '')} &rarr; ${escapeHtml(ride.dropoff_place || '')} (${escapeHtml(statusLabel(ride.status))})</div>` : ''}
+      </div>`;
+    addMarker('d:' + d.id, d.lat, d.lng, '🚗', html);
+    points.push([d.lat, d.lng]);
+  });
+
+  activeRides.forEach(r => {
+    const info = `
+      <div class="map-popup">
+        <strong>Ride #${escapeHtml(String(r.id || '').slice(0, 8))}</strong>
+        <div>Status: ${escapeHtml(statusLabel(r.status))}</div>
+        <div>Rider: ${escapeHtml(r.rider_name || 'Unknown')}${r.rider_phone ? ' (' + escapeHtml(r.rider_phone) + ')' : ''}</div>
+        <div>Driver: ${escapeHtml(r.driver_name || 'Unassigned')}</div>
+        <div>From: ${escapeHtml(r.pickup_place || '')}</div>
+        <div>To: ${escapeHtml(r.dropoff_place || '')}</div>
+        <div>Fare: FJ$${(r.fare || 0).toFixed(2)}${r.distance_km ? ' &middot; ' + r.distance_km.toFixed(1) + ' km' : ''}</div>
+      </div>`;
+    if (validPoint(r.pickup_lat, r.pickup_lng)) {
+      addMarker('p:' + r.id, r.pickup_lat, r.pickup_lng, '🧍', info);
+      points.push([r.pickup_lat, r.pickup_lng]);
+    }
+    if (validPoint(r.dropoff_lat, r.dropoff_lng)) {
+      addMarker('x:' + r.id, r.dropoff_lat, r.dropoff_lng, '🏁', info);
+      if (validPoint(r.pickup_lat, r.pickup_lng)) {
+        L.polyline([[r.pickup_lat, r.pickup_lng], [r.dropoff_lat, r.dropoff_lng]], {
+          color: '#38bdf8', weight: 3, dashArray: '6 8', opacity: 0.8,
+        }).addTo(mapLayer);
+      }
+    }
+  });
+
+  document.getElementById('map-count').textContent = `${points.length} on map`;
+  if (reopen) reopen.openPopup();
+  if (!mapFitted && points.length) {
+    liveMap.fitBounds(points, { padding: [40, 40], maxZoom: 14 });
+    mapFitted = true;
+  }
 }
 
 function renderStats() {
