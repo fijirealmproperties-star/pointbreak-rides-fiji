@@ -14,6 +14,7 @@
       <span class="header-subtitle">Admin Dashboard</span>
     </div>
     <div class="header-right">
+      <a href="#messaging" class="reg-btn" style="text-decoration:none">💬 Messaging</a>
       <button id="refresh-btn" class="reg-btn reg-btn-ghost" onclick="refreshDashboard()">⟳ Refresh</button>
       <span class="badge" id="connection-status">Connecting...</span>
     </div>
@@ -81,22 +82,33 @@
     </div>
   </section>
 
-  <section class="register-section">
+  <section class="register-section" id="messaging">
     <div class="section-header">
-      <h2>🔔 Send Notice</h2>
+      <h2>💬 Messaging — send notifications to users</h2>
       <span class="register-status" id="notice-status"></span>
     </div>
     <div class="register-row">
       <select id="notice-audience" class="reg-input">
-        <option value="all">Everyone (riders + drivers)</option>
-        <option value="riders">Riders only</option>
-        <option value="drivers">Drivers only</option>
+        <option value="all">Send to: Everyone (riders + drivers)</option>
+        <option value="riders">Send to: Riders only</option>
+        <option value="drivers">Send to: Drivers only</option>
       </select>
-      <input id="notice-title" class="reg-input" maxlength="80" placeholder="Title (e.g. Heavy rain warning)" autocomplete="off" />
-      <input id="notice-body" class="reg-input" maxlength="500" placeholder="Message" autocomplete="off" style="flex:2 1 320px" />
-      <button id="notice-submit" class="reg-btn" onclick="sendNotice()">Send notice</button>
+      <input id="notice-title" class="reg-input" maxlength="80" placeholder="Title (e.g. Heavy rain warning)" autocomplete="off" style="flex:2 1 280px" />
     </div>
-    <div id="notice-list" class="admin-hint" style="margin-top:10px"></div>
+    <div class="register-row" style="margin-top:8px">
+      <textarea id="notice-body" class="reg-input" maxlength="500" rows="4" placeholder="Type your message here…" oninput="noticeCount()" style="flex:1 1 100%;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div class="register-row" style="margin-top:8px;align-items:center">
+      <button class="reg-btn reg-btn-ghost" onclick="noticeTemplate(0)">🌧 Weather</button>
+      <button class="reg-btn reg-btn-ghost" onclick="noticeTemplate(1)">🔥 Busy area</button>
+      <button class="reg-btn reg-btn-ghost" onclick="noticeTemplate(2)">🎉 Promo</button>
+      <button class="reg-btn reg-btn-ghost" onclick="noticeTemplate(3)">🛠 Maintenance</button>
+      <span id="notice-count" class="admin-hint" style="margin-left:auto">0 / 500</span>
+      <button id="notice-submit" class="reg-btn" onclick="sendNotice()">Send notification</button>
+    </div>
+    <div class="admin-hint" style="margin-top:6px">Appears in the 🔔 bell on the Profile tab and as a phone alert for users who turned alerts on.</div>
+    <h3 style="margin:16px 0 6px;font-size:14px">Sent messages</h3>
+    <div id="notice-list" class="admin-hint"></div>
   </section>
 
   <section class="register-section">

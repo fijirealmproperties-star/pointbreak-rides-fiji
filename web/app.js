@@ -134,6 +134,22 @@ async function deleteNotice(id) {
   loadNotices();
 }
 
+const NOTICE_TEMPLATES = [
+  ['Weather warning', 'Heavy rain is expected. Please drive carefully and allow extra time for trips.'],
+  ['Busy area', 'High demand right now. Drivers, head to busy areas to pick up more rides.'],
+  ['Special offer', 'Ride with Pointbreak today and enjoy a special offer. Book your next ride now!'],
+  ['Scheduled maintenance', 'Pointbreak will have a short maintenance break tonight. Thank you for your patience.'],
+];
+function noticeCount() {
+  const el = document.getElementById('notice-count');
+  if (el) el.textContent = `${document.getElementById('notice-body').value.length} / 500`;
+}
+function noticeTemplate(i) {
+  document.getElementById('notice-title').value = NOTICE_TEMPLATES[i][0];
+  document.getElementById('notice-body').value = NOTICE_TEMPLATES[i][1];
+  noticeCount();
+}
+
 async function sendNotice() {
   const status = document.getElementById('notice-status');
   const btn = document.getElementById('notice-submit');
@@ -162,7 +178,8 @@ async function sendNotice() {
     status.className = 'register-status error';
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Send notice';
+    btn.textContent = 'Send notification';
+    noticeCount();
   }
 }
 
