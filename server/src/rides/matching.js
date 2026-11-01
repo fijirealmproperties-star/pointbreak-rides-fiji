@@ -1,5 +1,6 @@
 const { haversine, meterFareFor } = require('./fare');
 const { loadRide, rideEnvelope, rideForDriver } = require('./ride-utils');
+const { sendPush } = require('../push');
 
 const MATCH_TIMEOUT_MS = 30000;
 const MATCH_RETRY_MS = 8000;
@@ -207,7 +208,24 @@ class MatchingEngine {
         best = { driverId, distance };
       }
     }
-    return best || fallback;
+    if (best || fallback) return best || fallback;
+
+    // Nobody has the app open: fall back to drivers who are online but whose
+    // app is closed, as long as they can be reached by push notification.
+    const rows = this.db.prepare(
+      `SELECT d.id, d.lat, d.lng FROM drivers d
+       WHERE d.status='online'
+         AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = d.user_id)`
+    ).all();
+    let away = null;
+    for (const row of rows) {
+      if (this.onlineDrivers.has(row.id) || this.busyDrivers.has(row.id) || declined.has(row.id)) continue;
+      const distance = Number.isFinite(row.lat) && Number.isFinite(row.lng)
+        ? haversine(pickupLat, pickupLng, row.lat, row.lng)
+        : Infinity;
+      if (!away || distance < away.distance) away = { driverId: row.id, distance, away: true };
+    }
+    return away;
   }
 
   matchRide(rideId, pickupLat, pickupLng) {
@@ -235,10 +253,14 @@ class MatchingEngine {
     }
 
     const info = this.onlineDrivers.get(best.driverId);
+    const dRow = info ? null : this.db.prepare('SELECT lat, lng FROM drivers WHERE id=?').get(best.driverId);
+    const dLat = info ? info.lat : dRow && dRow.lat;
+    const dLng = info ? info.lng : dRow && dRow.lng;
     this.db.prepare('UPDATE rides SET driver_id=?, driver_lat=?, driver_lng=? WHERE id=?')
-      .run(best.driverId, info.lat, info.lng, rideId);
+      .run(best.driverId, dLat == null ? null : dLat, dLng == null ? null : dLng, rideId);
 
     this._emitToDriver(best.driverId, 'ride_request', rideEnvelope(rideForDriver(loadRide(this.db, rideId))));
+    this._pushRideRequest(best.driverId, loadRide(this.db, rideId));
 
     const timeout = setTimeout(() => {
       const pending = this.pendingMatches.get(rideId);
@@ -250,6 +272,34 @@ class MatchingEngine {
 
     this.pendingMatches.set(rideId, { driverId: best.driverId, timeout, attempt });
     return best;
+  }
+
+  _pushRideRequest(driverId, ride) {
+    try {
+      const d = this.db.prepare('SELECT user_id FROM drivers WHERE id=?').get(driverId);
+      if (!d) return;
+      const fare = ride.fare != null ? ` · FJ$${Number(ride.fare).toFixed(2)}` : '';
+      sendPush(this.db, d.user_id, {
+        title: '🚗 New ride request!',
+        body: `${ride.pickup_place || 'Pickup'} → ${ride.dropoff_place || 'Dropoff'}${fare}`,
+        tag: `ride-${ride.id}`,
+        rideId: ride.id,
+      }).catch(() => {});
+    } catch (e) {
+      console.error('Ride push failed:', e.message);
+    }
+  }
+
+  // An app opened from a push alert reconnects after the offer was made, so
+  // re-deliver any offer still waiting on this driver.
+  resendPendingOffer(driverId) {
+    for (const [rideId, pending] of this.pendingMatches) {
+      if (pending.driverId !== driverId) continue;
+      const ride = loadRide(this.db, rideId);
+      if (ride && ride.status === 'requested') {
+        this._emitToDriver(driverId, 'ride_request', rideEnvelope(rideForDriver(ride)));
+      }
+    }
   }
 
   _retrySoon(rideId, attempt, ride) {

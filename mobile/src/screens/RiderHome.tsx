@@ -197,10 +197,18 @@ export default function RiderHome({ onOpenRide }: Props) {
 
   // Heartbeat so the admin live map can see this rider is online.
   useEffect(() => {
-    const ping = () => {
+    let last: { lat: number; lng: number } | null = null;
+    const send = (body: object) => api("/riders/ping", { method: "POST", body }).catch(() => {});
+    const ping = async () => {
       const p = pickupRef.current;
-      const body = p && p.id === "current-location" ? { lat: p.lat, lng: p.lng } : {};
-      api("/riders/ping", { method: "POST", body }).catch(() => {});
+      if (p && p.id === "current-location") last = { lat: p.lat, lng: p.lng };
+      else {
+        try {
+          const c = await requestCurrentLocation();
+          last = { lat: c.lat, lng: c.lng };
+        } catch {}
+      }
+      send(last || (p ? { lat: p.lat, lng: p.lng } : {}));
     };
     ping();
     const t = setInterval(ping, 30000);

@@ -38,6 +38,7 @@ function setupSocket(io, matchingEngine, db) {
             socket.driverId = driver.id;
             if (driver.status === 'online') {
               matchingEngine.registerDriver(socket.id, user.id, driver.id, driver.lat, driver.lng);
+              matchingEngine.resendPendingOffer(driver.id);
             }
           }
         }

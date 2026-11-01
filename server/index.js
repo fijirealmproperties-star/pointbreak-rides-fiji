@@ -27,6 +27,7 @@ const db = new SQLiteWrapper(DB_PATH);
 (async () => {
   await db.ready;
   initSchema(db);
+  require('./src/push').initPush(db);
   try {
     const result = await seedData(db);
     if (result.seeded && result.demo) console.log('Seeded demo data (fresh database).');
@@ -70,6 +71,7 @@ const db = new SQLiteWrapper(DB_PATH);
   app.use('/api/rides', require('./src/routes/rides')(db, io, matchingEngine));
   app.use('/api/drivers', require('./src/routes/drivers')(db, matchingEngine));
   app.use('/api/riders', require('./src/routes/riders'));
+  app.use('/api/push', require('./src/routes/push')(db));
   app.use('/api/admin', require('./src/routes/admin')(db));
 
   // Admin dashboard (static, talks to the API on the same origin).

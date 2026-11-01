@@ -43,6 +43,40 @@ function isCacheable(url) {
   );
 }
 
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch (e) {
+    data = { title: "Pointbreak", body: event.data ? event.data.text() : "" };
+  }
+  const isRide = !!data.rideId;
+  event.waitUntil(
+    self.registration.showNotification(data.title || "Pointbreak Rides Fiji", {
+      body: data.body || "",
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      tag: data.tag || "pointbreak",
+      renotify: true,
+      requireInteraction: isRide,
+      vibrate: isRide ? [400, 150, 400, 150, 400, 150, 400] : [200],
+      data: { url: "/" },
+    })
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((list) => {
+      for (const c of list) {
+        if ("focus" in c) return c.focus();
+      }
+      return self.clients.openWindow("/");
+    })
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;

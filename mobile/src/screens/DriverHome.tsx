@@ -15,6 +15,7 @@ import { api, getToken, Ride } from "../api";
 import { connectSocket, getSocket } from "../socket";
 import { haversine, requestCurrentLocation, watchCurrentLocation } from "../geo";
 import MapView from "../components/MapView";
+import { enablePush, primeAudio, startRideAlert, stopRideAlert } from "../push";
 
 type Props = {
   onOpenRide: (rideId: string) => void;
@@ -107,9 +108,10 @@ export default function DriverHome({ onOpenRide }: Props) {
           if (d.active_ride_id) {
             setBusy(true);
             onOpenRide(d.active_ride_id);
-          } else if (d.status === "online" && !wentOnlineRef.current) {
-            await api("/drivers/status", { method: "POST", body: { online: false } });
-            setOnline(false);
+          } else if (d.status === "online") {
+            wentOnlineRef.current = true;
+            setOnline(true);
+            enablePush().catch(() => {});
           }
         } catch {
           // backend offline — that's fine, we stay offline
@@ -126,10 +128,9 @@ export default function DriverHome({ onOpenRide }: Props) {
         if (ev.active_ride_id) {
           setBusy(true);
           onOpenRide(ev.active_ride_id);
-        } else if (ev.online && !wentOnlineRef.current) {
-          api("/drivers/status", { method: "POST", body: { online: false } }).catch((e: any) => {
-            if (mounted) setError(e.message || "Could not reset your online status.");
-          });
+        } else if (ev.online) {
+          wentOnlineRef.current = true;
+          setOnline(true);
         }
         setLoading(false);
       };
@@ -156,6 +157,12 @@ export default function DriverHome({ onOpenRide }: Props) {
   }, []);
 
   // Auto-dismiss request after 30s.
+  useEffect(() => {
+    if (requestRide) startRideAlert();
+    else stopRideAlert();
+    return () => stopRideAlert();
+  }, [requestRide]);
+
   useEffect(() => {
     if (!requestRide) return;
     if (secondsLeft <= 0) {
@@ -247,8 +254,10 @@ export default function DriverHome({ onOpenRide }: Props) {
     }
 
     setStartingOnline(true);
+    primeAudio();
+    const pushResult = await enablePush();
     try {
-      // Ask for permission and confirm a fresh, accurate fix before making the
+      // Confirm a fresh, accurate fix before making the
       // driver available for matching.
       const position = await requestCurrentLocation();
       await api("/drivers/location", {
@@ -261,6 +270,7 @@ export default function DriverHome({ onOpenRide }: Props) {
       if (socket) socket.emit("driver_status", { online: true });
       wentOnlineRef.current = true;
       setOnline(true);
+      if (!pushResult.ok && pushResult.reason) setError(pushResult.reason);
     } catch (e: any) {
       setLocationError(e.message || "Allow location access to go online.");
     } finally {
