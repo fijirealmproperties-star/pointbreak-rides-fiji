@@ -23,12 +23,21 @@ export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
   if (!pushSupported()) {
     return { ok: false, reason: "Install the app to your home screen (Share → Add to Home Screen) to get alerts when it is closed." };
   }
+  let step = "start";
   try {
+    step = "permission";
     const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
     if (perm !== "granted") return { ok: false, reason: "Notifications are blocked. Allow them in your phone settings for Pointbreak." };
-    const reg = await navigator.serviceWorker.ready;
+    step = "service worker";
+    const reg: ServiceWorkerRegistration = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error("service worker not ready — close and reopen the app")), 8000)),
+    ]);
+    step = "server key";
     const { key } = await api<{ key: string }>("/push/key");
+    if (!key) throw new Error("server has no push key");
     const appKey = urlBase64ToUint8Array(key);
+    step = "subscribe";
     let sub = await reg.pushManager.getSubscription();
     try {
       if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
@@ -38,11 +47,12 @@ export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
       if (old) await old.unsubscribe();
       sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
     }
+    step = "save";
     await api("/push/subscribe", { method: "POST", body: { subscription: sub.toJSON() } });
     return { ok: true };
   } catch (e: any) {
-    const detail = [e?.name, e?.message].filter(Boolean).join(": ");
-    return { ok: false, reason: `Could not enable notifications${detail ? " (" + detail + ")" : ""}.` };
+    const detail = e ? [e.name, e.message].filter(Boolean).join(": ") || String(e) : "unknown";
+    return { ok: false, reason: `Could not enable notifications — failed at "${step}" (${detail}).` };
   }
 }
 
