@@ -117,6 +117,15 @@ async function registerDriver() {
   }
 }
 
+async function refreshDashboard() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = 'Refreshing…';
+  await Promise.all([loadCounts(), loadInitialData()]);
+  btn.disabled = false;
+  btn.textContent = '⟳ Refresh';
+}
+
 async function loadCounts() {
   if (!adminToken) return;
   try {
