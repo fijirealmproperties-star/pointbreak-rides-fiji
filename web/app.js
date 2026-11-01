@@ -5,6 +5,7 @@ const API_URL = window.location.hostname === 'localhost'
 let socket = null;
 let rides = [];
 let drivers = [];
+let liveRiders = [];
 let adminToken = localStorage.getItem('pb_admin_token') || null;
 let adminUserName = localStorage.getItem('pb_admin_user') || null;
 
@@ -174,6 +175,10 @@ async function loadCounts() {
     const c = await res.json();
     document.getElementById('stat-riders').textContent = c.riders;
     document.getElementById('stat-drivers').textContent = c.drivers;
+  } catch (e) {}
+  try {
+    const rr = await fetch(`${API_URL}/api/admin/riders/live`, { headers: { 'Authorization': 'Bearer ' + adminToken } });
+    if (rr.ok) { liveRiders = (await rr.json()).riders || []; renderMap(); }
   } catch (e) {}
 }
 
@@ -394,6 +399,18 @@ function renderMap() {
         }).addTo(mapLayer);
       }
     }
+  });
+
+  liveRiders.filter(p => validPoint(p.lat, p.lng)).forEach(p => {
+    const html = `
+      <div class="map-popup">
+        <strong>${escapeHtml(p.name || 'Rider')}</strong>
+        <div>Online rider</div>
+        ${p.phone ? `<div>Phone: ${escapeHtml(p.phone)}</div>` : ''}
+        <div>Last seen: ${escapeHtml(new Date(p.last_seen).toLocaleTimeString())}</div>
+      </div>`;
+    addMarker('r:' + p.id, p.lat, p.lng, '🙋', html);
+    points.push([p.lat, p.lng]);
   });
 
   document.getElementById('map-count').textContent = `${points.length} on map`;

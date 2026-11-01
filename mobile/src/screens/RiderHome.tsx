@@ -192,6 +192,21 @@ export default function RiderHome({ onOpenRide }: Props) {
     };
   }, []);
 
+  const pickupRef = useRef<Place | null>(null);
+  pickupRef.current = pickup;
+
+  // Heartbeat so the admin live map can see this rider is online.
+  useEffect(() => {
+    const ping = () => {
+      const p = pickupRef.current;
+      const body = p && p.id === "current-location" ? { lat: p.lat, lng: p.lng } : {};
+      api("/riders/ping", { method: "POST", body }).catch(() => {});
+    };
+    ping();
+    const t = setInterval(ping, 30000);
+    return () => clearInterval(t);
+  }, []);
+
   useEffect(() => {
     if (!dropoff || !pickup) {
       setEstimate(null);

@@ -2,6 +2,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth, requireRole } = require('../middleware/auth');
+const { onlineRiders } = require('../presence');
 
 module.exports = (db) => {
   const router = express.Router();
@@ -18,6 +19,14 @@ module.exports = (db) => {
       ORDER BY r.requested_at DESC
     `).all();
     res.json({ rides });
+  });
+
+  router.get('/riders/live', (req, res) => {
+    const riders = onlineRiders().map((p) => {
+      const u = db.prepare('SELECT id, name, phone FROM users WHERE id=?').get(p.userId);
+      return u ? { id: u.id, name: u.name, phone: u.phone, lat: p.lat, lng: p.lng, last_seen: new Date(p.at).toISOString() } : null;
+    }).filter(Boolean);
+    res.json({ riders });
   });
 
   router.get('/counts', (req, res) => {
