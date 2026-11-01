@@ -76,7 +76,7 @@ async function sendPush(db, userId, payload) {
       });
       sent += 1;
     } catch (e) {
-      if (e && (e.statusCode === 404 || e.statusCode === 410)) removeSubscription(db, row.endpoint);
+      if (e && [401, 403, 404, 410].includes(e.statusCode)) removeSubscription(db, row.endpoint);
       else console.error('Push failed:', e && e.message);
     }
   }));

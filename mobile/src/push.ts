@@ -28,17 +28,21 @@ export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
     if (perm !== "granted") return { ok: false, reason: "Notifications are blocked. Allow them in your phone settings for Pointbreak." };
     const reg = await navigator.serviceWorker.ready;
     const { key } = await api<{ key: string }>("/push/key");
+    const appKey = urlBase64ToUint8Array(key);
     let sub = await reg.pushManager.getSubscription();
-    if (!sub) {
-      sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(key),
-      });
+    try {
+      if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
+    } catch (first: any) {
+      // A subscription made with an older key blocks a new one; start fresh.
+      const old = await reg.pushManager.getSubscription();
+      if (old) await old.unsubscribe();
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: appKey });
     }
     await api("/push/subscribe", { method: "POST", body: { subscription: sub.toJSON() } });
     return { ok: true };
   } catch (e: any) {
-    return { ok: false, reason: e?.message || "Could not enable notifications." };
+    const detail = [e?.name, e?.message].filter(Boolean).join(": ");
+    return { ok: false, reason: `Could not enable notifications${detail ? " (" + detail + ")" : ""}.` };
   }
 }
 
