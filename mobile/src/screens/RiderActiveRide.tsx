@@ -117,6 +117,7 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
           }
           if (typeof ev.meter_distance_km === "number") next.meter_distance_km = ev.meter_distance_km;
           if (typeof ev.meter_fare === "number") next.meter_fare = ev.meter_fare;
+          if (typeof ev.meter_wait_min === "number") next.meter_wait_min = ev.meter_wait_min;
           return next;
         });
       };

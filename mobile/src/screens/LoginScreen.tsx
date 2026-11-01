@@ -119,12 +119,12 @@ export default function LoginScreen({ onLogin }: Props) {
         <View style={styles.hero}>
           <Text style={styles.logo}>{driverApp ? "🚕" : "🏄"}</Text>
           <Text style={styles.logoWave}>~ · ~ · ~</Text>
-          <Text style={styles.title}>{driverApp ? "Pointbreak Driver" : "Pointbreak Rides"}</Text>
+          <Text style={styles.title}>{driverApp ? "Pointbreak Driver" : "Pointbreak Fiji Rides"}</Text>
           <Text style={styles.tagline}>
-            {driverApp ? "Driver app · Suva, Viti Levu" : "Ride the wave. Reach the island."}
+            {driverApp ? "Driver app · Fiji is the world" : "Fiji rides at your fingertips"}
           </Text>
           <Text style={styles.subTagline}>
-            {driverApp ? "Go online and accept rides." : "Fiji's ride-hailing, from Suva to the shore."}
+            {driverApp ? "Go online and accept rides." : "Book a ride anywhere across Fiji."}
           </Text>
         </View>
 

@@ -9,8 +9,10 @@ export const DEMO_DRIVER = { phone: "+6799001001", password: "driver123" };
 function detectWebDriverMode(): boolean {
   if (Platform.OS !== "web") return false;
   try {
-    const search = (globalThis as any)?.location?.search || "";
-    const hash = (globalThis as any)?.location?.hash || "";
+    const location = (globalThis as any)?.location;
+    if (location?.port === "8083" || location?.pathname === "/driver") return true;
+    const search = location?.search || "";
+    const hash = location?.hash || "";
     return /[?&#](app|role)=driver\b/.test(search + hash);
   } catch {
     return false;

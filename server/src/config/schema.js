@@ -83,6 +83,8 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'rides', 'meter_distance_km', 'REAL DEFAULT 0');
   ensureColumn(db, 'rides', 'meter_fare', 'REAL DEFAULT 0');
   ensureColumn(db, 'rides', 'meter_started_at', 'TEXT');
+  ensureColumn(db, 'rides', 'meter_wait_min', 'REAL DEFAULT 0');
+  ensureColumn(db, 'rides', 'meter_last_at', 'TEXT');
   ensureColumn(db, 'rides', 'final_fare', 'REAL');
   ensureColumn(db, 'rides', 'final_distance_km', 'REAL');
   ensureColumn(db, 'rides', 'final_duration_min', 'REAL');

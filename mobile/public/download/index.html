@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Get Pointbreak Rides Fiji</title>
+<title>Get Pointbreak Fiji Rides</title>
 <meta name="theme-color" content="#0A1628" />
-<meta name="description" content="Install Pointbreak Rides Fiji on your phone — free, no app store needed." />
+<meta name="description" content="Install Pointbreak Fiji Rides on your phone — free, no app store needed." />
 <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="manifest" href="/manifest.webmanifest" />
@@ -107,17 +107,20 @@
 </head>
 <body>
 <header>
-  <img class="icon" src="/icons/icon-192.png" alt="Pointbreak Rides Fiji" width="96" height="96" />
-  <h1>Pointbreak Rides Fiji</h1>
-  <p class="tag">Ride the wave. Reach the island.<br />Free to install — no app store, no download fees.</p>
+  <img class="icon" src="/icons/icon-192.png" alt="Pointbreak Fiji Rides" width="96" height="96" />
+  <h1>Pointbreak Fiji Rides</h1>
+  <p class="tag">Fiji rides at your fingertips.<br />Free to install — no app store, no download fees.</p>
 </header>
 
 <main>
   <section class="card">
-    <h2>Install the app <span class="pill">Free</span></h2>
-    <p>The full app installs straight from this website and gets its own icon on your home screen.</p>
-    <button id="install" class="btn" hidden>Install now</button>
-    <a id="open" class="btn" href="/">Open Pointbreak Rides</a>
+    <h2>Choose your app <span class="pill">Free</span></h2>
+    <p>Book a ride as a passenger or sign in as a driver. Both open instantly in your browser.</p>
+    <a class="btn" href="/">Open passenger app</a>
+    <a class="btn secondary" href="/?app=driver">Open driver app</a>
+    <p class="ios">On iPhone, add Pointbreak to your Home Screen to use it like an app. This is not an App Store download.</p>
+    <p class="android">Install Pointbreak on your Home Screen for quick access. It opens like an app and updates automatically.</p>
+    <button id="install" class="btn" hidden>Install app</button>
 
     <div class="android">
       <ol>
@@ -128,12 +131,15 @@
     </div>
     <div class="ios">
       <ol>
-        <li>Open this page in <b>Safari</b>.</li>
-        <li>Tap the <b>Share</b> button.</li>
-        <li>Choose <b>Add to Home Screen</b>.</li>
+        <li>Open this page in <b>Safari</b> (not inside another app).</li>
+        <li>Tap <b>Share</b> (the square with the up arrow).</li>
+        <li>Scroll down and tap <b>Add to Home Screen</b>.</li>
+        <li>If it is missing, scroll to the bottom of the Share menu, tap <b>Edit Actions</b>, and enable it.</li>
+        <li>Tap <b>Add</b>. If shown, leave <b>Open as Web App</b> turned on.</li>
       </ol>
+      <p class="hint">This creates a Pointbreak icon on your Home Screen; it does not install from the App Store.</p>
     </div>
-    <p class="hint">Works on Android, iPhone and desktop. Updates itself automatically.</p>
+    <p class="hint android">Works on Android, iPhone and desktop. Updates itself automatically.</p>
   </section>
 
   <section class="card">
@@ -145,7 +151,7 @@
 </main>
 
 <footer>
-  Pointbreak Rides Fiji · Fiji ride-hailing<br />
+  Pointbreak Fiji Rides · Fiji ride-hailing<br />
   Map data © OpenStreetMap contributors
 </footer>
 
@@ -163,7 +169,7 @@
       });
     }
 
-    // Show the native install button when the browser offers it.
+    // iOS Safari uses Share > Add to Home Screen instead of this install prompt.
     var deferred = null;
     var installBtn = document.getElementById("install");
     window.addEventListener("beforeinstallprompt", function (e) {

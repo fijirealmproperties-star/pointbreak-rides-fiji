@@ -63,7 +63,7 @@ export default function RiderHome({ onOpenRide }: Props) {
   const [lastRefresh, setLastRefresh] = useState("");
   const cleanupRef = useRef<(() => void) | null>(null);
 
-  async function locateMe(auto: boolean) {
+  async function locateMe() {
     setLocating(true);
     try {
       const p = await requestCurrentLocation();
@@ -74,12 +74,12 @@ export default function RiderHome({ onOpenRide }: Props) {
         type: "city",
         lat: p.lat,
         lng: p.lng,
-        region: `${p.lat.toFixed(4)}, ${p.lng.toFixed(4)}`,
+        region: `Accurate to about ${Math.round(p.accuracy)} m`,
       });
       setRecenterToken((t) => t + 1);
-      if (!auto) setError("");
+      setError("");
     } catch (e: any) {
-      if (!auto) setError(e?.message || "Could not get your location.");
+      setError(e?.message || "Could not get your location.");
     } finally {
       setLocating(false);
     }
@@ -177,16 +177,7 @@ export default function RiderHome({ onOpenRide }: Props) {
 
   useEffect(() => {
     loadPlaces().then(setPlaces);
-    setPickup({
-      id: "current-location",
-      name: "Current Location",
-      short_name: "Suva City Centre",
-      type: "city",
-      lat: SUVA.lat,
-      lng: SUVA.lng,
-      region: "Suva",
-    });
-    locateMe(true);
+    locateMe();
     setDriveMarkers(
       SEED_DRIVERS.map((d, i) => ({
         id: `seed-${i}`,
@@ -277,8 +268,8 @@ export default function RiderHome({ onOpenRide }: Props) {
   }, []);
 
   const markers: MapMarker[] = useMemo(() => {
-    const out: MapMarker[] = driveMarkers.map((m) => ({ ...m }));
-    if (pickup) out.push({ id: "pickup", lat: pickup.lat, lng: pickup.lng, color: "#000000", label: "" });
+    const out: MapMarker[] = driveMarkers.map((m) => ({ ...m, icon: "🚗" }));
+    if (pickup) out.push({ id: "pickup", lat: pickup.lat, lng: pickup.lng, color: "#000000", label: "", icon: "🧍" });
     if (dropoff) out.push({ id: "dropoff", lat: dropoff.lat, lng: dropoff.lng, color: "#00C853", label: "" });
     return out;
   }, [driveMarkers, pickup, dropoff]);
@@ -538,16 +529,31 @@ export default function RiderHome({ onOpenRide }: Props) {
                     <View style={styles.routeDotGreen} />
                   </View>
                   <View style={styles.routeInputsCol}>
-                    <TouchableOpacity
-                      style={styles.routeInput}
-                      activeOpacity={0.7}
-                      onPress={() => setPickerOpen("pickup")}
-                    >
-                      <Text style={styles.routeInputText} numberOfLines={1}>
-                        {pickup?.name || "Set pickup"}
-                      </Text>
-                      {locating ? <ActivityIndicator size="small" color="#999" /> : null}
-                    </TouchableOpacity>
+                    <View style={styles.pickupInputRow}>
+                      <TouchableOpacity
+                        style={[styles.routeInput, styles.pickupInput]}
+                        activeOpacity={0.7}
+                        onPress={() => setPickerOpen("pickup")}
+                      >
+                        <Text style={styles.routeInputText} numberOfLines={1}>
+                          {pickup?.name || "Set pickup"}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        accessibilityRole="button"
+                        accessibilityLabel="Use my current location"
+                        style={styles.locateButton}
+                        activeOpacity={0.7}
+                        disabled={locating}
+                        onPress={locateMe}
+                      >
+                        {locating ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.locateButtonText}>Locate</Text>
+                        )}
+                      </TouchableOpacity>
+                    </View>
                     <TouchableOpacity
                       style={[styles.routeInput, styles.routeInputLast]}
                       activeOpacity={0.7}
@@ -819,6 +825,27 @@ const styles = StyleSheet.create({
   routeInputsCol: {
     flex: 1,
     gap: 8,
+  },
+  pickupInputRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  pickupInput: {
+    flex: 1,
+  },
+  locateButton: {
+    minWidth: 68,
+    minHeight: 44,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    backgroundColor: "#000",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  locateButtonText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "700",
   },
   routeInput: {
     backgroundColor: "#F3F3F3",

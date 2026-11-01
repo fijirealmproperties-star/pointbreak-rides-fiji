@@ -121,7 +121,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
       <Text style={styles.surfTag}>
-        🌊 Ride the wave · Pointbreak Rides Fiji · surf responsibly
+        🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
     </ScrollView>
   );
@@ -188,7 +188,7 @@ function Root() {
   if (!booted) {
     return (
       <View style={[styles.screen, { alignItems: "center", justifyContent: "center" }]}>
-        <Text style={styles.bootTitle}>🏄 Pointbreak Rides</Text>
+        <Text style={styles.bootTitle}>🏄 Pointbreak Fiji Rides</Text>
         <Text style={{ color: colors.textMuted, fontSize: typography.small, marginTop: 8 }}>
           Catching the swell…
         </Text>

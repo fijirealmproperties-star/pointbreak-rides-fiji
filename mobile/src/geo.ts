@@ -1,3 +1,5 @@
+import * as Location from "expo-location";
+
 const R = 6371;
 
 export function toRad(deg: number): number {
@@ -38,24 +40,232 @@ export function interpolatePoint(
   };
 }
 
-export function requestCurrentLocation(): Promise<{ lat: number; lng: number }> {
-  return new Promise((resolve, reject) => {
-    const nav: any = typeof navigator !== "undefined" ? navigator : undefined;
-    if (!nav || !nav.geolocation) {
-      reject(new Error("Location is not available here."));
-      return;
-    }
-    nav.geolocation.getCurrentPosition(
-      (pos: any) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      (err: any) =>
-        reject(
-          new Error(
-            err && err.code === 1
-              ? "Location permission denied."
-              : "Could not get your location."
-          )
-        ),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+export type CurrentLocation = { lat: number; lng: number; accuracy: number };
+
+function browserLocationError(error: GeolocationPositionError): Error {
+  if (error.code === error.PERMISSION_DENIED) {
+    return new Error(
+      "Location permission is off. In iPhone Settings, allow Location Services for Safari or the Pointbreak Home Screen app, then allow location for this site."
     );
+  }
+  if (error.code === error.POSITION_UNAVAILABLE) {
+    return new Error(
+      "iPhone could not determine your location. Turn on Location Services and Precise Location, then try outdoors."
+    );
+  }
+  return new Error("GPS took too long to respond. Keep Pointbreak open, check Location Services, and try again.");
+}
+
+function hasBrowserGeolocation(): boolean {
+  return typeof navigator !== "undefined" && !!navigator.geolocation;
+}
+
+export function watchCurrentLocation(
+  onPosition: (position: CurrentLocation) => void,
+  onError?: (error: Error) => void,
+  maximumAccuracy = 250
+): () => void {
+  if (hasBrowserGeolocation()) {
+    let active = true;
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        if (!active) return;
+        const { latitude, longitude, accuracy } = position.coords;
+        if (
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          longitude < -180 ||
+          longitude > 180 ||
+          !Number.isFinite(accuracy) ||
+          accuracy <= 0
+        ) return;
+        if (accuracy > maximumAccuracy) {
+          onError?.(new Error(`GPS accuracy is about ${Math.round(accuracy)} m. Move outdoors for a better signal.`));
+          return;
+        }
+        onPosition({ lat: latitude, lng: longitude, accuracy });
+      },
+      (error) => {
+        if (active) onError?.(browserLocationError(error));
+      },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
+    );
+    return () => {
+      active = false;
+      navigator.geolocation.clearWatch(watchId);
+    };
+  }
+
+  let active = true;
+  let subscription: Location.LocationSubscription | null = null;
+  void (async () => {
+    try {
+      const permission = await Location.requestForegroundPermissionsAsync();
+      if (!active) return;
+      if (permission.status !== Location.PermissionStatus.GRANTED) {
+        onError?.(new Error("Location permission denied. Enable location access to share your position."));
+        return;
+      }
+
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.BestForNavigation,
+          timeInterval: 1000,
+          distanceInterval: 0,
+        },
+        (position) => {
+          const { latitude, longitude, accuracy } = position.coords;
+          if (!active) return;
+          if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180 ||
+            accuracy === null ||
+            !Number.isFinite(accuracy) ||
+            accuracy <= 0
+          ) return;
+          if (accuracy > maximumAccuracy) {
+            onError?.(new Error(`GPS accuracy is about ${Math.round(accuracy)} m. Move outdoors for a better signal.`));
+            return;
+          }
+          onPosition({ lat: latitude, lng: longitude, accuracy });
+        }
+      );
+      if (!active) subscription.remove();
+    } catch {
+      if (active) onError?.(new Error("Could not start GPS tracking. Check your device location settings."));
+    }
+  })();
+
+  return () => {
+    active = false;
+    subscription?.remove();
+  };
+}
+
+export function requestCurrentLocation(
+  maximumAcceptedAccuracy = 250
+): Promise<{ lat: number; lng: number; accuracy: number }> {
+  if (hasBrowserGeolocation()) {
+    return new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        ({ coords }) => {
+          const { latitude, longitude, accuracy } = coords;
+          if (
+            !Number.isFinite(latitude) ||
+            !Number.isFinite(longitude) ||
+            latitude < -90 ||
+            latitude > 90 ||
+            longitude < -180 ||
+            longitude > 180 ||
+            !Number.isFinite(accuracy) ||
+            accuracy <= 0
+          ) {
+            reject(new Error("iPhone returned an invalid GPS location. Try again with Location Services enabled."));
+            return;
+          }
+          if (accuracy > maximumAcceptedAccuracy) {
+            reject(
+              new Error(
+                `Your location is only accurate to about ${Math.round(accuracy)} m. Enable Precise Location or move outdoors, then try again.`
+              )
+            );
+            return;
+          }
+          resolve({ lat: latitude, lng: longitude, accuracy });
+        },
+        (error) => reject(browserLocationError(error)),
+        { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 }
+      );
+    });
+  }
+
+  return new Promise((resolve, reject) => {
+    const desiredAccuracy = 50;
+    let bestFix: { position: Location.LocationObject; accuracy: number } | null = null;
+    let subscription: Location.LocationSubscription | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let settled = false;
+
+    const finish = (
+      fix?: { position: Location.LocationObject; accuracy: number },
+      error?: Error
+    ) => {
+      if (settled) return;
+      settled = true;
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      subscription?.remove();
+      if (fix) {
+        resolve({
+          lat: fix.position.coords.latitude,
+          lng: fix.position.coords.longitude,
+          accuracy: fix.accuracy,
+        });
+      } else {
+        reject(error || new Error("Could not get your location."));
+      }
+    };
+
+    const finishWithBestFix = () => {
+      if (bestFix && bestFix.accuracy <= maximumAcceptedAccuracy) {
+        finish(bestFix);
+      } else if (bestFix) {
+        finish(
+          undefined,
+          new Error(
+            `Your location is only accurate to about ${Math.round(bestFix.accuracy)} m. Move outdoors or pin your pickup on the map.`
+          )
+        );
+      } else {
+        finish(undefined, new Error("Could not get your location. Check location services and try again."));
+      }
+    };
+
+    timeoutId = setTimeout(finishWithBestFix, 20000);
+    void (async () => {
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (settled) return;
+        if (permission.status !== Location.PermissionStatus.GRANTED) {
+          finish(undefined, new Error("Location permission denied."));
+          return;
+        }
+
+        subscription = await Location.watchPositionAsync(
+          {
+            accuracy: Location.Accuracy.BestForNavigation,
+            timeInterval: 1000,
+            distanceInterval: 0,
+          },
+          (position) => {
+            const { latitude, longitude, accuracy } = position.coords;
+            if (
+              !Number.isFinite(latitude) ||
+              !Number.isFinite(longitude) ||
+              latitude < -90 ||
+              latitude > 90 ||
+              longitude < -180 ||
+              longitude > 180 ||
+              accuracy === null ||
+              !Number.isFinite(accuracy) ||
+              accuracy <= 0
+            ) {
+              return;
+            }
+
+            if (!bestFix || accuracy < bestFix.accuracy) bestFix = { position, accuracy };
+            if (accuracy <= desiredAccuracy) finish({ position, accuracy });
+          }
+        );
+        if (settled) subscription.remove();
+      } catch {
+        finish(undefined, new Error("Could not get your location. Check location services and try again."));
+      }
+    })();
   });
 }

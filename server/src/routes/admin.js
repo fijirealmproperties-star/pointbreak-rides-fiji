@@ -20,6 +20,12 @@ module.exports = (db) => {
     res.json({ rides });
   });
 
+  router.get('/counts', (req, res) => {
+    const riders = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'rider'").get().n;
+    const drivers = db.prepare('SELECT COUNT(*) AS n FROM drivers').get().n;
+    res.json({ riders, drivers });
+  });
+
   router.get('/drivers/all', (req, res) => {
     const drivers = db.prepare(`
       SELECT d.*, u.name

@@ -25,6 +25,10 @@ export default function TaxiMeter({ ride }: { ride: Ride }) {
           <Text style={styles.meterCellLabel}>Est. time</Text>
         </View>
       </View>
+      <Text style={styles.tariff}>
+        Flag fall FJ$2 day · FJ$3 night · FJ$5 airport · FJ$0.14 / 100 m · FJ$0.18 / min waiting
+        {typeof ride.meter_wait_min === "number" ? ` (waited ${fmtDuration(ride.meter_wait_min)})` : ""}
+      </Text>
     </View>
   );
 }
@@ -44,6 +48,7 @@ const styles = StyleSheet.create({
   meterFare: { color: colors.ocean, fontSize: 46, fontWeight: "900", marginTop: 2 },
   meterRow: { flexDirection: "row", alignSelf: "stretch", marginTop: 12, gap: 8 },
   meterCell: { flex: 1, alignItems: "center" },
+  tariff: { color: colors.textMuted, fontSize: typography.tiny, marginTop: 12, textAlign: "center" },
   meterCellValue: { color: colors.text, fontSize: typography.subtitle, fontWeight: "800" },
   meterCellLabel: { color: colors.textMuted, fontSize: typography.tiny, marginTop: 3, textTransform: "uppercase", letterSpacing: 0.4 },
 });

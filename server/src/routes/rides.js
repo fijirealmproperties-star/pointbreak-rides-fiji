@@ -43,10 +43,11 @@ async function estimateFor(db, pickup, dropoff) {
     path = computeRoutePath(pickup.lat, pickup.lng, dropoff.lat, dropoff.lng);
   }
 
-  const fare = calculateFare(distanceKm, durationMin);
+  // Quote assumes ~15% of the trip is spent waiting in traffic.
+  const fare = calculateFare(distanceKm, durationMin * 0.15, { pickupLat: pickup.lat, pickupLng: pickup.lng });
   return {
     distance_km: fare.distanceKm,
-    duration_min: fare.durationMin,
+    duration_min: Math.round(durationMin * 100) / 100,
     fare: fare.fare,
     currency: fare.currency,
     base_fare: fare.baseFare,

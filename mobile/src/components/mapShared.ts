@@ -6,6 +6,7 @@ export interface MapMarker {
   lng: number;
   color?: string;
   label?: string;
+  icon?: string;
 }
 
 export interface MapPoint {
@@ -82,21 +83,32 @@ export function escapeHtml(s: unknown): string {
   return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ESC_MAP[c] || c);
 }
 
-export const markerPinHtml = (color: string, label?: string) =>
-  '<div class="pb-pin" style="--c:' +
-  color +
-  '">' +
-  '<div class="pb-dot"></div><div class="pb-tip"></div>' +
-  (label ? '<div class="pb-label">' + escapeHtml(label) + "</div>" : "") +
-  "</div>";
+const EMOJI_STYLE =
+  "font-size:28px;line-height:32px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))";
+const LABEL_STYLE =
+  "margin-top:2px;background:#0A1628;color:#F7F9FC;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;border:1px solid #2A3B4D;white-space:nowrap";
 
-export const vehicleHtml = (color: string, angle: number) =>
-  '<div class="pb-veh" style="--c:' +
-  color +
-  ";transform:rotate(" +
-  (angle % 360) +
-  'deg)">' +
-  '<div class="pb-tri"></div><div class="pb-core"></div></div>';
+export const markerPinHtml = (color: string, label?: string, icon?: string) =>
+  icon
+    ? '<div style="display:flex;flex-direction:column;align-items:center"><div style="' +
+      EMOJI_STYLE +
+      '">' +
+      escapeHtml(icon) +
+      "</div>" +
+      (label ? '<div style="' + LABEL_STYLE + '">' + escapeHtml(label) + "</div>" : "") +
+      "</div>"
+    : '<div class="pb-pin" style="--c:' +
+      color +
+      '">' +
+      '<div class="pb-dot"></div><div class="pb-tip"></div>' +
+      (label ? '<div class="pb-label">' + escapeHtml(label) + "</div>" : "") +
+      "</div>";
+
+// Car icon for the moving driver; emoji cars don't rotate meaningfully, so the angle is ignored.
+export const vehicleHtml = (_color: string, _angle: number) =>
+  '<div class="pb-car" style="width:32px;height:40px;display:flex;align-items:center;justify-content:center"><div style="' +
+  EMOJI_STYLE +
+  '">🚗</div></div>';
 
 export function mapStateFromProps(props: {
   center: { lat: number; lng: number };
@@ -119,6 +131,7 @@ export function mapStateFromProps(props: {
       lng: m.lng,
       color: m.color,
       label: m.label,
+      icon: m.icon,
     })),
     route: props.route ? props.route.map((p) => ({ lat: p.lat, lng: p.lng })) : undefined,
     vehicle: props.vehicle

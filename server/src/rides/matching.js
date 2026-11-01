@@ -1,4 +1,4 @@
-const { haversine, calculateFare } = require('./fare');
+const { haversine, meterFareFor } = require('./fare');
 const { loadRide, rideEnvelope, rideForDriver } = require('./ride-utils');
 
 const MATCH_TIMEOUT_MS = 30000;
@@ -413,17 +413,13 @@ class MatchingEngine {
     const metered = meterKm >= 0.1;
     const distanceKm = metered ? meterKm : Number(ride.distance_km) || 0;
 
-    let durationMin = Number(ride.duration_min) || 0;
-    if (metered) {
-      const row = this.db.prepare(
-        "SELECT (julianday('now') - julianday(COALESCE(meter_started_at, pickup_at, accepted_at, requested_at))) * 24 * 60 AS elapsed FROM rides WHERE id=?"
-      ).get(ride.id);
-      const elapsed = row && row.elapsed != null ? Number(row.elapsed) : NaN;
-      if (Number.isFinite(elapsed) && elapsed > 0) durationMin = elapsed;
-    }
+    // Waiting minutes: measured when metered, otherwise ~15% of the quoted trip.
+    const waitMin = metered
+      ? Number(ride.meter_wait_min) || 0
+      : (Number(ride.duration_min) || 0) * 0.15;
 
-    const fare = calculateFare(distanceKm, durationMin);
-    return { distanceKm: fare.distanceKm, durationMin: fare.durationMin, fare: fare.fare };
+    const fare = meterFareFor(ride, distanceKm, waitMin);
+    return { distanceKm: fare.distanceKm, durationMin: Number(ride.duration_min) || fare.durationMin, fare: fare.fare };
   }
 }
 

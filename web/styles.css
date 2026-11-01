@@ -137,7 +137,7 @@ header h1 {
 
 .stats-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
   gap: 1rem;
   padding: 1.25rem 1.5rem;
 }

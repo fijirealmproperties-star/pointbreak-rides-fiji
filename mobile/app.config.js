@@ -1,34 +1,39 @@
 // Dynamic Expo config — the single source of truth for app metadata.
 // Env-dependent values come from the EAS build profile or a local .env:
-//   EXPO_PUBLIC_API_URL  (required for store and download builds) HTTPS origin
+//   EXPO_PUBLIC_API_URL  (required for production and download builds) HTTPS origin
 //   EXPO_PUBLIC_DEMO     "false" hides demo accounts/buttons in store builds
 const IS_PROD =
   process.env.EAS_BUILD_PROFILE === "production" ||
   process.env.EAS_BUILD_PROFILE === "download" ||
   process.env.APP_VARIANT === "production";
+const IS_PREVIEW_BUILD = process.env.EAS_BUILD_PROFILE === "preview";
 
 const apiUrl = (process.env.EXPO_PUBLIC_API_URL || "").replace(/\/+$/, "");
 
-if (IS_PROD && !apiUrl) {
-  throw new Error(
-    "EXPO_PUBLIC_API_URL must be an HTTPS origin for production builds (e.g. https://api.pointbreakrides.com)."
-  );
-}
-
-// The downloadable APK is built from the "download" profile in eas.json, which
-// ships a placeholder so a build can't silently point at localhost. Replace it
-// with your deployment origin (or set it via `eas env:create`).
-if (apiUrl.includes("CHANGE-ME")) {
-  throw new Error(
-    "Set a real EXPO_PUBLIC_API_URL in eas.json (build.download.env) or with " +
-      "`eas env:create --name EXPO_PUBLIC_API_URL --value https://your-domain` before building."
-  );
+if (IS_PROD || IS_PREVIEW_BUILD) {
+  let validApiOrigin = false;
+  try {
+    const parsed = new URL(apiUrl);
+    validApiOrigin =
+      (IS_PROD ? parsed.protocol === "https:" : ["http:", "https:"].includes(parsed.protocol)) &&
+      parsed.origin === apiUrl &&
+      !apiUrl.includes("CHANGE-ME");
+  } catch {
+    validApiOrigin = false;
+  }
+  if (!validApiOrigin) {
+    throw new Error(
+      IS_PROD
+        ? "Set EXPO_PUBLIC_API_URL to your deployed HTTPS API origin before building (for example, https://rides.example.com)."
+        : "Set EXPO_PUBLIC_API_URL to a reachable API origin before building a preview app."
+    );
+  }
 }
 
 module.exports = {
   expo: {
-    name: "Pointbreak Rides Fiji",
-    slug: "pointbreak-rides-fiji",
+    name: "Pointbreak Fiji Rides",
+    slug: "pointbreakfijirides",
     version: "1.0.0",
     orientation: "portrait",
     userInterfaceStyle: "dark",

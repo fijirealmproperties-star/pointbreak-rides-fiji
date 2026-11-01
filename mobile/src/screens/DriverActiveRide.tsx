@@ -13,7 +13,7 @@ import { colors, typography, fmtFare, fmtKm, fmtDuration } from "../theme";
 import { api, getToken, Ride, parsePath } from "../api";
 import { connectSocket, getSocket } from "../socket";
 import { isDriverApp } from "../appMode";
-import { bearing, haversine, interpolatePoint } from "../geo";
+import { bearing, haversine, interpolatePoint, watchCurrentLocation } from "../geo";
 import MapView, { MapMarker, MapPoint } from "../components/MapView";
 import TaxiMeter from "../components/TaxiMeter";
 
@@ -59,6 +59,8 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [selfPos, setSelfPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
+  const [locationError, setLocationError] = useState("");
   const [simming, setSimming] = useState(false);
   const [simDone, setSimDone] = useState(false);
   const [code, setCode] = useState("");
@@ -110,6 +112,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
           }
           if (typeof ev.meter_distance_km === "number") next.meter_distance_km = ev.meter_distance_km;
           if (typeof ev.meter_fare === "number") next.meter_fare = ev.meter_fare;
+          if (typeof ev.meter_wait_min === "number") next.meter_wait_min = ev.meter_wait_min;
           return next;
         });
         if (typeof ev.driver_lat === "number" && typeof ev.driver_lng === "number") {
@@ -135,9 +138,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       const d = await api<Ride>(`/rides/${rideId}`);
       setRide(d);
       setError("");
-      if (typeof d.driver_lat === "number" && typeof d.driver_lng === "number") {
-        setSelfPos({ lat: d.driver_lat, lng: d.driver_lng });
-      }
     } catch (e: any) {
       setError(e.message || "Could not load ride.");
     } finally {
@@ -174,15 +174,47 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
     ];
   }, [pLat, pLng, dLat, dLng]);
 
-  const self = selfPos || (ride && ride.driver_lat != null && ride.driver_lng != null
-    ? { lat: ride.driver_lat, lng: ride.driver_lng }
-    : null);
+  const self = selfPos;
 
   const target: MapPoint | null = ride
     ? status === "in_progress"
       ? { lat: ride.dropoff_lat, lng: ride.dropoff_lng }
       : { lat: ride.pickup_lat, lng: ride.pickup_lng }
     : null;
+
+  useEffect(() => {
+    if (!ride || simming || !["accepted", "arrived", "in_progress"].includes(status)) return;
+
+    let lastSent: { lat: number; lng: number; at: number } | null = null;
+    return watchCurrentLocation(
+      (position) => {
+        setSelfPos({ lat: position.lat, lng: position.lng });
+        setGpsAccuracy(position.accuracy);
+        setLocationError("");
+        setRide((current) =>
+          current ? { ...current, driver_lat: position.lat, driver_lng: position.lng } : current
+        );
+
+        const now = Date.now();
+        const movedKm = lastSent
+          ? haversine(lastSent.lat, lastSent.lng, position.lat, position.lng)
+          : Infinity;
+        if (lastSent && movedKm < 0.005 && now - lastSent.at < 5000) return;
+        lastSent = { lat: position.lat, lng: position.lng, at: now };
+
+        getSocket()?.emit("driver_location", {
+          ride_id: rideId,
+          lat: position.lat,
+          lng: position.lng,
+        });
+        api("/drivers/location", {
+          method: "POST",
+          body: { lat: position.lat, lng: position.lng },
+        }).catch((e: any) => setLocationError(e.message || "Could not update your location."));
+      },
+      (e) => setLocationError(e.message),
+    );
+  }, [rideId, !!ride, status, simming]);
 
   const selfAngle = useMemo(() => {
     if (!self || !target) return 0;
@@ -343,7 +375,14 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         vehicle={self ? { lat: self.lat, lng: self.lng, angle: selfAngle, color: colors.ocean } : undefined}
       />
       <View style={styles.mapAttribution}>
-        <Text style={styles.mapAttributionText}>You · {fmtKm(ride.distance_km)} trip</Text>
+        <Text style={styles.mapAttributionText}>
+          {simming
+            ? "Simulation mode · GPS paused"
+            : gpsAccuracy !== null
+            ? `Live GPS · ±${Math.round(gpsAccuracy)} m`
+            : locationError || "Waiting for accurate GPS…"}
+          {" · "}{fmtKm(ride.distance_km)} trip
+        </Text>
       </View>
 
       <View style={styles.card}>

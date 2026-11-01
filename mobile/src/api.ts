@@ -61,6 +61,7 @@ export interface Ride {
   quoted_fare?: number | null;
   meter_distance_km?: number | null;
   meter_fare?: number | null;
+  meter_wait_min?: number | null;
   meter_started_at?: string | null;
   final_fare?: number | null;
   final_distance_km?: number | null;
@@ -237,7 +238,19 @@ export async function api<T = any>(
   }
 
   const text = await res.text();
-  const data = text ? JSON.parse(text) : {};
+  let data: any = {};
+  if (text) {
+    try {
+      data = JSON.parse(text);
+    } catch {
+      if (res.headers.get("content-type")?.includes("text/html") || /^\s*</.test(text)) {
+        throw new Error(
+          "Ride service is not connected. This website host serves the app only; sign-in and rides need the Node.js API to be deployed and configured."
+        );
+      }
+      throw new Error("Ride service returned an invalid response. Please try again later.");
+    }
+  }
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data as T;
 }

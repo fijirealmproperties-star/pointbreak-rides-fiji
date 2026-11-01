@@ -55,6 +55,7 @@ async function adminLogin() {
     localStorage.setItem('pb_admin_token', adminToken);
     localStorage.setItem('pb_admin_user', adminUserName);
     renderAdminState();
+    loadCounts();
     document.getElementById('adm-phone').value = '';
     document.getElementById('adm-password').value = '';
   } catch (e) {
@@ -116,7 +117,19 @@ async function registerDriver() {
   }
 }
 
+async function loadCounts() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/counts`, { headers: { 'Authorization': 'Bearer ' + adminToken } });
+    if (!res.ok) return;
+    const c = await res.json();
+    document.getElementById('stat-riders').textContent = c.riders;
+    document.getElementById('stat-drivers').textContent = c.drivers;
+  } catch (e) {}
+}
+
 async function loadInitialData() {
+  loadCounts();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([
@@ -193,6 +206,7 @@ function connectSocket() {
 }
 
 async function pollData() {
+  loadCounts();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([

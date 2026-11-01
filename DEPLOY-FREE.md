@@ -721,8 +721,7 @@ commission.
 ### Optional: signed APK for sideloading
 
 Only needed if you want a file to hand out, or for devices without Chrome. Run
-this on your laptop: `eas-cli` 25 wants Node 20.18+ and Ubuntu 24.04 ships 18.19,
-so the VM is the wrong machine — and no global install is needed anyway:
+this on your laptop; no global EAS install is needed:
 
 ```bash
 cd mobile
@@ -732,25 +731,30 @@ npx eas-cli@latest login
 `npx eas login` is not the same thing: npm resolves the package `eas`, an
 unrelated templating library.
 
-Then set the origin and build:
+Link the Expo project to an EAS project you own if it is not already linked,
+then set the API origin as a **preview** environment variable. Use the same
+HTTPS hostname users open in their browser; do not use a private LAN address,
+temporary tunnel, or example hostname:
 
 ```bash
-# 1. mobile/eas.json -> build.download.env.EXPO_PUBLIC_API_URL
-#    https://<SITE_DOMAIN>, not CHANGE-ME, and commit it: eas.json is tracked, so
-#    an uncommitted edit blocks `git pull` on the VM later (§7).
-# 2. build
+cd mobile
+npx eas-cli@latest init
+npx eas-cli@latest env:create --environment preview --name EXPO_PUBLIC_API_URL --value https://<SITE_DOMAIN>
 npx eas-cli@latest build -p android --profile download
 ```
 
 `EXPO_PUBLIC_DEMO=false` is already set in that profile, so the demo logins are
-hidden. The build fails immediately if the API URL is missing or still the
-`CHANGE-ME` placeholder — `app.config.js` treats the `download` profile like
-production for exactly that reason — instead of shipping an app that silently
-falls back to `10.0.2.2:3003` (the emulator's host) and looks broken on a phone.
+hidden. The `download` profile uses the EAS `preview` environment. The build
+fails immediately if `EXPO_PUBLIC_API_URL` is missing, not HTTPS, or contains a
+path instead of being an origin. The `preview` profile also requires an explicit
+reachable API origin (HTTP is permitted for private testing); neither profile
+can silently fall back to `10.0.2.2:3003` (the emulator's host).
 
-Build only once the domain answers over HTTPS. The URL is compiled into the
-bundle, so an APK built against a domain that is not up yet is dead on arrival and
-costs another build to replace. Free-plan builds are a limited monthly quota of
+The API domain is deliberately not hard-coded in `eas.json`. Configure it in
+your EAS `preview` environment after the server and DNS are ready. Build only
+once that domain answers over HTTPS: the URL is compiled into the bundle, so an
+APK built against a domain that is not up yet is unusable and costs another
+build to replace. Free-plan builds are a limited monthly quota of
 low-priority builds with no overage: they queue, and when the quota is gone you
 wait for the reset rather than pay.
 

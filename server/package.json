@@ -7,9 +7,9 @@
     "node": ">=18"
   },
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node server/index.js",
-    "server": "node server/index.js"
+    "start": "node index.js",
+    "dev": "node index.js",
+    "server": "node index.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

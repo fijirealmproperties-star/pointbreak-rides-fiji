@@ -13,16 +13,20 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, fmtFare, fmtKm } from "../theme";
 import { api, getToken, Ride } from "../api";
 import { connectSocket, getSocket } from "../socket";
-import { requestCurrentLocation } from "../geo";
+import { haversine, requestCurrentLocation, watchCurrentLocation } from "../geo";
 import MapView from "../components/MapView";
 
 type Props = {
   onOpenRide: (rideId: string) => void;
 };
 
-const SUVA = { lat: -18.1416, lng: 178.4419 };
-
 type OnlineState = "online" | "offline" | "busy";
+
+type DriverStats = {
+  total_trips: number;
+  average_rating: number | null;
+  total_earnings: number;
+};
 
 export default function DriverHome({ onOpenRide }: Props) {
   const insets = useSafeAreaInsets();
@@ -34,17 +38,45 @@ export default function DriverHome({ onOpenRide }: Props) {
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState("");
+  const [stats, setStats] = useState<DriverStats | null>(null);
+  const [driverPosition, setDriverPosition] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
+  const [locationError, setLocationError] = useState("");
+  const [locatingLocation, setLocatingLocation] = useState(true);
+  const [startingOnline, setStartingOnline] = useState(false);
   const requestRef = useRef<Ride | null>(null);
 
   const status: OnlineState = busy ? "busy" : online ? "online" : "offline";
 
+  const locateMe = useCallback(async () => {
+    setLocatingLocation(true);
+    setLocationError("");
+    try {
+      const position = await requestCurrentLocation();
+      setDriverPosition(position);
+    } catch (e: any) {
+      setDriverPosition(null);
+      setLocationError(e.message || "Could not get your location.");
+    } finally {
+      setLocatingLocation(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void locateMe();
+  }, [locateMe]);
+
   // On mount: connect socket, check busy/active ride, start request timer.
   useEffect(() => {
     let mounted = true;
+    let socket: ReturnType<typeof connectSocket> | null = null;
+    let onRequest: ((ev: any) => void) | null = null;
+    let onStatus: ((ev: any) => void) | null = null;
+    let onDriverState: ((ev: any) => void) | null = null;
+    let bootTimer: ReturnType<typeof setTimeout> | null = null;
     (async () => {
       const token = await getToken();
-      const socket = connectSocket(token || "");
-      const onRequest = (ev: any) => {
+      socket = connectSocket(token || "");
+      onRequest = (ev: any) => {
         if (!ev || !ev.ride) return;
         // The server only targets drivers it considers online, so trust it:
         // surface the offer (with Accept) and reflect that we're online.
@@ -53,7 +85,7 @@ export default function DriverHome({ onOpenRide }: Props) {
         setRequestRide(ev.ride);
         setSecondsLeft(30);
       };
-      const onStatus = (ev: any) => {
+      onStatus = (ev: any) => {
         if (!ev || ev.ride_id !== requestRef.current?.id) return;
         if ((ev.status === "cancelled" || ev.status === "declined" || ev.status === "no_driver")) {
           requestRef.current = null;
@@ -75,7 +107,8 @@ export default function DriverHome({ onOpenRide }: Props) {
             setBusy(true);
             onOpenRide(d.active_ride_id);
           } else if (d.status === "online") {
-            setOnline(true);
+            await api("/drivers/status", { method: "POST", body: { online: false } });
+            setOnline(false);
           }
         } catch {
           // backend offline — that's fine, we stay offline
@@ -87,25 +120,38 @@ export default function DriverHome({ onOpenRide }: Props) {
         socket.emit("identify", { token });
       }
       // Register unconditionally — the socket may still be connecting at mount.
-      socket.once("driver_state", (ev: any) => {
+      onDriverState = (ev: any) => {
         if (!mounted || !ev) return;
         if (ev.active_ride_id) {
           setBusy(true);
           onOpenRide(ev.active_ride_id);
-        } else if (ev.online) setOnline(true);
+        } else if (ev.online) {
+          api("/drivers/status", { method: "POST", body: { online: false } }).catch((e: any) => {
+            if (mounted) setError(e.message || "Could not reset your online status.");
+          });
+        }
         setLoading(false);
-      });
-      const bootTimer = setTimeout(() => {
+      };
+      socket.once("driver_state", onDriverState);
+      bootTimer = setTimeout(() => {
         if (mounted) setLoading(false);
       }, 2500);
       moved();
-      return () => {
-        mounted = false;
-        clearTimeout(bootTimer);
-        socket.off("ride_request", onRequest);
-        socket.off("ride_status", onStatus);
-      };
+      api<DriverStats>("/drivers/stats")
+        .then((data) => {
+          if (mounted) setStats(data);
+        })
+        .catch((e: any) => {
+          if (mounted) setError(e.message || "Could not load driver stats.");
+        });
     })();
+    return () => {
+      mounted = false;
+      if (bootTimer) clearTimeout(bootTimer);
+      if (socket && onRequest) socket.off("ride_request", onRequest);
+      if (socket && onStatus) socket.off("ride_status", onStatus);
+      if (socket && onDriverState) socket.off("driver_state", onDriverState);
+    };
   }, []);
 
   // Auto-dismiss request after 30s.
@@ -119,23 +165,30 @@ export default function DriverHome({ onOpenRide }: Props) {
     return () => clearTimeout(t);
   }, [requestRide, secondsLeft]);
 
-  // Keep the backend's idea of our position fresh while online, so the rider's
-  // request reaches the genuinely nearest driver.
+  // Stream accurate GPS fixes while online so the map and ride matching use the
+  // driver's real position instead of the old Suva placeholder.
   useEffect(() => {
     if (!online) return;
-    reportLocation();
-    const t = setInterval(() => reportLocation(), 30000);
-    return () => clearInterval(t);
-  }, [online]);
+    let lastReported: { lat: number; lng: number; at: number } | null = null;
+    return watchCurrentLocation(
+      (position) => {
+        setDriverPosition(position);
+        setLocationError("");
+        const now = Date.now();
+        const movedKm = lastReported
+          ? haversine(lastReported.lat, lastReported.lng, position.lat, position.lng)
+          : Infinity;
+        if (lastReported && movedKm < 0.01 && now - lastReported.at < 10000) return;
 
-  async function reportLocation() {
-    try {
-      const p = await requestCurrentLocation();
-      await api("/drivers/location", { method: "POST", body: { lat: p.lat, lng: p.lng } });
-    } catch {
-      // Location is optional — matching falls back to the driver's last known spot.
-    }
-  }
+        lastReported = { lat: position.lat, lng: position.lng, at: now };
+        api("/drivers/location", {
+          method: "POST",
+          body: { lat: position.lat, lng: position.lng },
+        }).catch((e: any) => setLocationError(e.message || "Could not update your location."));
+      },
+      (e) => setLocationError(e.message),
+    );
+  }, [online]);
 
   // Pull-to-refresh (native) / Refresh button: re-sync online state, any
   // active ride, and our last reported position.
@@ -144,18 +197,28 @@ export default function DriverHome({ onOpenRide }: Props) {
     setRefreshing(true);
     setError("");
     try {
-      const p = requestCurrentLocation().catch(() => null);
-      const d = await api<{ status: string; active_ride_id?: string | null }>("/drivers/status");
+      const [d, nextStats] = await Promise.all([
+        api<{ status: string; active_ride_id?: string | null }>("/drivers/status"),
+        api<DriverStats>("/drivers/stats"),
+      ]);
+      setStats(nextStats);
       if (d.active_ride_id) {
         setBusy(true);
         onOpenRide(d.active_ride_id);
+      } else if (d.status === "online") {
+        const pos = await requestCurrentLocation().catch(() => null);
+        if (pos) {
+          setDriverPosition(pos);
+          await api("/drivers/location", { method: "POST", body: { lat: pos.lat, lng: pos.lng } });
+          setOnline(true);
+        } else {
+          await api("/drivers/status", { method: "POST", body: { online: false } });
+          setOnline(false);
+          setLocationError("Location access is needed to go online. Tap Go Online and allow location.");
+        }
       } else {
         setBusy(false);
-        setOnline(d.status === "online");
-      }
-      const pos = await p;
-      if (pos) {
-        await api("/drivers/location", { method: "POST", body: { lat: pos.lat, lng: pos.lng } });
+        setOnline(false);
       }
       setLastRefresh(new Date().toLocaleTimeString());
     } catch (e: any) {
@@ -167,15 +230,38 @@ export default function DriverHome({ onOpenRide }: Props) {
 
   async function toggleOnline() {
     setError("");
-    const next = !online;
-    setOnline(next);
-    const socket = getSocket();
-    if (socket) socket.emit("driver_status", { online: next });
+    setLocationError("");
+
+    if (online) {
+      try {
+        await api("/drivers/status", { method: "POST", body: { online: false } });
+        const socket = getSocket();
+        if (socket) socket.emit("driver_status", { online: false });
+        setOnline(false);
+      } catch (e: any) {
+        setError(e.message || "Could not update status.");
+      }
+      return;
+    }
+
+    setStartingOnline(true);
     try {
-      await api("/drivers/status", { method: "POST", body: { online: next } });
-      if (next) reportLocation();
+      // Ask for permission and confirm a fresh, accurate fix before making the
+      // driver available for matching.
+      const position = await requestCurrentLocation();
+      await api("/drivers/location", {
+        method: "POST",
+        body: { lat: position.lat, lng: position.lng },
+      });
+      setDriverPosition(position);
+      await api("/drivers/status", { method: "POST", body: { online: true } });
+      const socket = getSocket();
+      if (socket) socket.emit("driver_status", { online: true });
+      setOnline(true);
     } catch (e: any) {
-      setError(e.message || "Could not update status.");
+      setLocationError(e.message || "Allow location access to go online.");
+    } finally {
+      setStartingOnline(false);
     }
   }
 
@@ -220,8 +306,8 @@ export default function DriverHome({ onOpenRide }: Props) {
     <View style={styles.screen}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>🏄 Pointbreak Driver</Text>
-          <Text style={styles.headerSub}>Suva · Viti Levu</Text>
+          <Text style={styles.headerTitle}>🚕 Pointbreak Driver</Text>
+          <Text style={styles.headerSub}>Fiji is the world</Text>
         </View>
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -246,20 +332,48 @@ export default function DriverHome({ onOpenRide }: Props) {
       </View>
 
       <View style={styles.mapWrap}>
-        <MapView
-          style={{ flex: 1 }}
-          center={SUVA}
-          zoom={0.04}
-          markers={[
-            { id: "me", lat: SUVA.lat, lng: SUVA.lng, color: status === "online" ? colors.green : colors.ocean, label: "You" },
-          ]}
-        />
-        <View style={styles.mapAttribution}>
-          <Text style={styles.mapAttributionText}>Trip pricing surf is up · FJ$ base + km</Text>
-        </View>
+        {driverPosition ? (
+          <>
+            <MapView
+              style={{ flex: 1 }}
+              center={driverPosition}
+              zoom={0.015}
+              markers={[
+                { id: "me", lat: driverPosition.lat, lng: driverPosition.lng, color: status === "online" ? colors.green : colors.ocean, label: "You", icon: "🚗" },
+              ]}
+            />
+            <View style={styles.mapAttribution}>
+              <Text style={styles.mapAttributionText}>
+                Your GPS location · ±{Math.round(driverPosition.accuracy)} m
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.locationPlaceholder}>
+            <Text style={styles.locationPlaceholderTitle}>
+              {locatingLocation
+                ? "Getting your location…"
+                : online
+                ? "Waiting for your location"
+                : "Your location is not set"}
+            </Text>
+            <Text style={styles.locationPlaceholderText}>
+              {locationError || (online
+                ? "Allow location access and enable GPS to show your position."
+                : locatingLocation
+                ? "Allow location access when your device asks."
+                : "Your position stays private until you choose to go online.")}
+            </Text>
+            {!locatingLocation ? (
+              <TouchableOpacity style={styles.locateBtn} onPress={locateMe} activeOpacity={0.75}>
+                <Text style={styles.locateBtnText}>Try GPS again</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        )}
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error || locationError ? <Text style={styles.error}>{error || locationError}</Text> : null}
 
       <ScrollView
         style={styles.controls}
@@ -297,29 +411,42 @@ export default function DriverHome({ onOpenRide }: Props) {
                 { backgroundColor: online ? colors.green : colors.card, borderColor: online ? colors.green : colors.border },
               ]}
               onPress={toggleOnline}
+              disabled={startingOnline}
             >
               <View style={styles.onlineBtnInner}>
-                <View style={[styles.onlineDot, { backgroundColor: online ? "#fff" : colors.textMuted }]} />
+                {startingOnline ? (
+                  <ActivityIndicator size="small" color={colors.ocean} />
+                ) : (
+                  <View style={[styles.onlineDot, { backgroundColor: online ? "#fff" : colors.textMuted }]} />
+                )}
                 <Text style={[styles.onlineBtnText, { color: online ? "#fff" : colors.textMuted }]}>
-                  {online ? "Go Offline" : "Go Online"}
+                  {startingOnline ? "Getting your location…" : online ? "Go Offline" : "Go Online"}
                 </Text>
               </View>
               <Text style={[styles.onlineHint, { color: online ? "rgba(255,255,255,0.75)" : colors.textMuted }]}>
-                {online ? "Receiving ride requests" : "Tap to start receiving rides"}
+                {online
+                  ? "Receiving ride requests"
+                  : startingOnline
+                  ? "Allow location access when prompted"
+                  : "Tap to share your location and receive rides"}
               </Text>
             </TouchableOpacity>
             <View style={styles.infoRow}>
               <View style={styles.infoCard}>
-                <Text style={styles.infoValue}>2.5★</Text>
+                <Text style={styles.infoValue}>
+                  {stats?.average_rating != null ? `${stats.average_rating.toFixed(1)}★` : "—"}
+                </Text>
                 <Text style={styles.infoLabel}>Rating</Text>
               </View>
               <View style={styles.infoCard}>
-                <Text style={styles.infoValue}>12</Text>
+                <Text style={styles.infoValue}>{stats?.total_trips ?? "—"}</Text>
                 <Text style={styles.infoLabel}>Trips</Text>
               </View>
               <View style={styles.infoCard}>
-                <Text style={styles.infoValue}>FJ$0.00</Text>
-                <Text style={styles.infoLabel}>Today</Text>
+                <Text style={styles.infoValue}>
+                  {stats ? fmtFare(stats.total_earnings) : "—"}
+                </Text>
+                <Text style={styles.infoLabel}>Earned</Text>
               </View>
             </View>
           </>
@@ -402,6 +529,36 @@ const styles = StyleSheet.create({
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   statusText: { fontSize: typography.tiny, fontWeight: "700" },
   mapWrap: { flex: 1 },
+  locationPlaceholder: {
+    flex: 1,
+    minHeight: 180,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 28,
+    backgroundColor: colors.deep,
+  },
+  locationPlaceholderTitle: {
+    color: colors.text,
+    fontSize: typography.body,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  locationPlaceholderText: {
+    color: colors.textMuted,
+    fontSize: typography.small,
+    textAlign: "center",
+    marginTop: 8,
+  },
+  locateBtn: {
+    marginTop: 16,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  locateBtnText: { color: colors.ocean, fontSize: typography.small, fontWeight: "700" },
   mapAttribution: {
     position: "absolute",
     left: 12,

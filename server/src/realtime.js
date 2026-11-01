@@ -1,6 +1,6 @@
 const { verifyAccessToken } = require('./config/jwt');
 const { loadRide } = require('./rides/ride-utils');
-const { haversine, calculateFare } = require('./rides/fare');
+const { haversine, meterFareFor } = require('./rides/fare');
 
 const idOf = (data) => data && (data.ride_id || data.rideId);
 
@@ -104,22 +104,33 @@ function setupSocket(io, matchingEngine, db) {
       let meterDistanceKm = Number(prev.meter_distance_km) || 0;
       let meterFare = Number(prev.meter_fare) || 0;
       let meterDurationMin = 0;
+      let meterWaitMin = Number(prev.meter_wait_min) || 0;
+      let flagFall = null;
 
       if (prev.status === 'in_progress') {
         // Accumulate the distance actually travelled; ignore GPS jitter (<5 m)
-        // and teleports (>2 km in a single tick).
+        // and teleports (>2 km in a single tick). Slow/stopped time is waiting.
+        const row = db.prepare(
+          `SELECT (julianday('now') - julianday(COALESCE(meter_started_at, pickup_at))) * 24 * 60 AS elapsed,
+                  (julianday('now') - julianday(meter_last_at)) * 24 * 60 AS since_last
+           FROM rides WHERE id=?`
+        ).get(rideId);
+        const sinceLast = row && row.since_last != null ? Number(row.since_last) : 0;
         if (Number.isFinite(prev.driver_lat) && Number.isFinite(prev.driver_lng)) {
           const delta = haversine(prev.driver_lat, prev.driver_lng, lat, lng);
           if (delta >= 0.005 && delta <= 2) meterDistanceKm += delta;
+          if (sinceLast > 0 && sinceLast < 5) {
+            const speedKmh = delta / (sinceLast / 60);
+            if (speedKmh < 10) meterWaitMin += sinceLast;
+          }
         }
-        const row = db.prepare(
-          "SELECT (julianday('now') - julianday(COALESCE(meter_started_at, pickup_at))) * 24 * 60 AS elapsed FROM rides WHERE id=?"
-        ).get(rideId);
         meterDurationMin = row && row.elapsed != null ? Math.max(0, Number(row.elapsed)) : 0;
-        meterFare = calculateFare(meterDistanceKm, meterDurationMin).fare;
+        const calc = meterFareFor(prev, meterDistanceKm, meterWaitMin);
+        meterFare = calc.fare;
+        flagFall = calc.baseFare;
 
-        db.prepare('UPDATE rides SET driver_lat=?, driver_lng=?, meter_distance_km=?, meter_fare=? WHERE id=? AND driver_id=?')
-          .run(lat, lng, meterDistanceKm, meterFare, rideId, socket.driverId);
+        db.prepare("UPDATE rides SET driver_lat=?, driver_lng=?, meter_distance_km=?, meter_fare=?, meter_wait_min=?, meter_last_at=datetime('now') WHERE id=? AND driver_id=?")
+          .run(lat, lng, meterDistanceKm, meterFare, meterWaitMin, rideId, socket.driverId);
       } else {
         db.prepare('UPDATE rides SET driver_lat=?, driver_lng=? WHERE id=? AND driver_id=?')
           .run(lat, lng, rideId, socket.driverId);
@@ -134,6 +145,8 @@ function setupSocket(io, matchingEngine, db) {
         meter_distance_km: meterDistanceKm,
         meter_fare: meterFare,
         meter_duration_min: meterDurationMin,
+        meter_wait_min: meterWaitMin,
+        meter_flag_fall: flagFall,
       };
       matchingEngine._emitToUser(prev.rider_id, 'ride_location_update', payload);
       // The driver runs a live meter too, so echo the same reading back to them.

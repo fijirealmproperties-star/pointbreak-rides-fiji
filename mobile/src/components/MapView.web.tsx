@@ -151,7 +151,7 @@ function applyState(rt: MapRuntime, s: MapState) {
 
   // Static markers — rebuild only when the set changes.
   const markerSig = (s.markers || [])
-    .map((m) => `${m.id}:${m.lat},${m.lng}:${m.color}:${m.label || ""}`)
+    .map((m) => `${m.id}:${m.lat},${m.lng}:${m.color}:${m.label || ""}:${m.icon || ""}`)
     .join("|");
   if (markerSig !== rt.markerSig) {
     layers.markers.clearLayers();
@@ -160,9 +160,9 @@ function applyState(rt: MapRuntime, s: MapState) {
       L.marker([m.lat, m.lng], {
         icon: L.divIcon({
           className: "",
-          html: markerPinHtml(color, m.label),
+          html: markerPinHtml(color, m.label, m.icon),
           iconSize: [28, 40],
-          iconAnchor: [14, 30],
+          iconAnchor: m.icon ? [14, 16] : [14, 30],
         }),
         interactive: false,
       }).addTo(layers.markers);

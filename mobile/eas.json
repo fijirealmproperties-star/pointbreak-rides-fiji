@@ -13,22 +13,23 @@
     },
     "preview": {
       "distribution": "internal",
+      "environment": "preview",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_DEMO": "true",
-        "EXPO_PUBLIC_API_URL": "http://192.168.0.35:3003"
+        "EXPO_PUBLIC_DEMO": "true"
       }
     },
     "download": {
       "distribution": "internal",
+      "environment": "preview",
       "android": { "buildType": "apk" },
       "env": {
-        "EXPO_PUBLIC_DEMO": "false",
-        "EXPO_PUBLIC_API_URL": "https://washing-vital-ministry-runtime.trycloudflare.com"
+        "EXPO_PUBLIC_DEMO": "false"
       }
     },
     "production": {
       "autoIncrement": true,
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_DEMO": "false"
       }

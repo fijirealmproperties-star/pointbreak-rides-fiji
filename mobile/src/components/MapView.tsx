@@ -139,12 +139,16 @@ function applyState(s) {
 
   (s.markers || []).forEach(function (m) {
     var c = m.color || "#0066CC";
-    var html = '<div class="pb-pin" style="--c:' + c + '">' +
+    var emo = "font-size:28px;line-height:32px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))";
+    var html = m.icon
+      ? '<div style="display:flex;flex-direction:column;align-items:center"><div style="' + emo + '">' + esc(m.icon) + '</div>' +
+        (m.label ? '<div class="pb-label">' + esc(m.label) + '</div>' : "") + '</div>'
+      : '<div class="pb-pin" style="--c:' + c + '">' +
       '<div class="pb-dot"></div><div class="pb-tip"></div>' +
       (m.label ? '<div class="pb-label">' + esc(m.label) + '</div>' : "") +
       '</div>';
     L.marker([m.lat, m.lng], {
-      icon: L.divIcon({ className: "", html: html, iconSize: [28, 40], iconAnchor: [14, 30] }),
+      icon: L.divIcon({ className: "", html: html, iconSize: [28, 40], iconAnchor: m.icon ? [14, 16] : [14, 30] }),
       interactive: false,
     }).addTo(markerLayer);
   });
@@ -152,8 +156,7 @@ function applyState(s) {
   if (s.vehicle) {
     var c = s.vehicle.color || "#FF6B35";
     var ang = (s.vehicle.angle || s.vehicleAngle || 0) % 360;
-    var vhtml = '<div class="pb-veh" style="--c:' + c + ';transform:rotate(' + ang + 'deg)">' +
-      '<div class="pb-tri"></div><div class="pb-core"></div></div>';
+    var vhtml = '<div style="width:32px;height:40px;display:flex;align-items:center;justify-content:center"><div style="font-size:28px;line-height:32px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))">🚗</div></div>';
     L.marker([s.vehicle.lat, s.vehicle.lng], {
       icon: L.divIcon({ className: "", html: vhtml, iconSize: [32, 40], iconAnchor: [16, 20] }),
       interactive: false,
