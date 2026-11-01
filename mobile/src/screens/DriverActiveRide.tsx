@@ -113,6 +113,11 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
           if (typeof ev.meter_distance_km === "number") next.meter_distance_km = ev.meter_distance_km;
           if (typeof ev.meter_fare === "number") next.meter_fare = ev.meter_fare;
           if (typeof ev.meter_wait_min === "number") next.meter_wait_min = ev.meter_wait_min;
+          if (typeof ev.speed_kmh === "number") {
+            next.speed_kmh = ev.speed_kmh;
+            next.stopped_sec = typeof ev.stopped_sec === "number" ? ev.stopped_sec : 0;
+            next.stopped_recv_at = Date.now();
+          }
           return next;
         });
         if (typeof ev.driver_lat === "number" && typeof ev.driver_lng === "number") {

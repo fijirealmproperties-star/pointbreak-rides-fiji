@@ -6,6 +6,8 @@ const idOf = (data) => data && (data.ride_id || data.rideId);
 
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
+const stopSince = new Map();
+
 function setupSocket(io, matchingEngine, db) {
   io.on('connection', (socket) => {
     socket.userId = null;
@@ -107,6 +109,8 @@ function setupSocket(io, matchingEngine, db) {
       let meterDurationMin = 0;
       let meterWaitMin = Number(prev.meter_wait_min) || 0;
       let flagFall = null;
+      let speedKmh = 0;
+      let stoppedSec = 0;
 
       if (prev.status === 'in_progress') {
         // Accumulate the distance actually travelled; ignore GPS jitter (<5 m)
@@ -121,9 +125,18 @@ function setupSocket(io, matchingEngine, db) {
           const delta = haversine(prev.driver_lat, prev.driver_lng, lat, lng);
           if (delta >= 0.005 && delta <= 2) meterDistanceKm += delta;
           if (sinceLast > 0 && sinceLast < 5) {
-            const speedKmh = delta / (sinceLast / 60);
+            const calcSpeed = delta >= 0.005 ? delta / (sinceLast / 60) : 0;
+            const gpsSpeed = Number(data && data.speed);
+            speedKmh = Number.isFinite(gpsSpeed) && gpsSpeed >= 0 ? gpsSpeed * 3.6 : calcSpeed;
+            if (speedKmh > 200) speedKmh = 0;
             if (speedKmh < 10) meterWaitMin += sinceLast;
           }
+        }
+        if (speedKmh < 10) {
+          if (!stopSince.has(rideId)) stopSince.set(rideId, Date.now());
+          stoppedSec = Math.round((Date.now() - stopSince.get(rideId)) / 1000);
+        } else {
+          stopSince.delete(rideId);
         }
         meterDurationMin = row && row.elapsed != null ? Math.max(0, Number(row.elapsed)) : 0;
         const calc = meterFareFor(prev, meterDistanceKm, meterWaitMin);
@@ -148,6 +161,8 @@ function setupSocket(io, matchingEngine, db) {
         meter_duration_min: meterDurationMin,
         meter_wait_min: meterWaitMin,
         meter_flag_fall: flagFall,
+        speed_kmh: Math.round(speedKmh * 10) / 10,
+        stopped_sec: stoppedSec,
       };
       matchingEngine._emitToUser(prev.rider_id, 'ride_location_update', payload);
       // The driver runs a live meter too, so echo the same reading back to them.

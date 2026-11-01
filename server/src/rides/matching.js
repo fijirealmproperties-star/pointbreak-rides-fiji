@@ -424,9 +424,13 @@ class MatchingEngine {
       case 'arrived':
         this.db.prepare("UPDATE rides SET status='arrived', arrived_at=datetime('now') WHERE id=?").run(rideId);
         break;
-      case 'in_progress':
-        this.db.prepare("UPDATE rides SET status='in_progress', pickup_at=datetime('now'), meter_started_at=datetime('now') WHERE id=?").run(rideId);
+      case 'in_progress': {
+        // The meter starts the moment the rider's PIN is accepted, at the flag fall.
+        const nowStr = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const flag = meterFareFor({ ...ride, meter_started_at: nowStr }, 0, 0);
+        this.db.prepare("UPDATE rides SET status='in_progress', pickup_at=datetime('now'), meter_started_at=datetime('now'), meter_last_at=datetime('now'), meter_distance_km=0, meter_wait_min=0, meter_fare=? WHERE id=?").run(flag.fare, rideId);
         break;
+      }
       case 'completed': {
         const final = this._finalizeFare(ride);
         this.db.prepare(
