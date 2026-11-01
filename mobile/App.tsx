@@ -28,6 +28,7 @@ import RiderTrips from "./src/screens/RiderTrips";
 import DriverHome from "./src/screens/DriverHome";
 import DriverActiveRide from "./src/screens/DriverActiveRide";
 import DriverTrips from "./src/screens/DriverTrips";
+import NoticeBell from "./src/components/NoticeBell";
 
 type TabKey = "home" | "trips" | "profile";
 
@@ -242,6 +243,7 @@ function Root() {
       ) : screen.name === "profile" && user ? (
         <ProfileScreen user={user} onLogout={logout} />
       ) : null}
+      {showTab && <NoticeBell />}
       {showTab && <TabBar active={activeTab} onTab={goTab} />}
     </View>
   );

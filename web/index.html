@@ -83,6 +83,24 @@
 
   <section class="register-section">
     <div class="section-header">
+      <h2>🔔 Send Notice</h2>
+      <span class="register-status" id="notice-status"></span>
+    </div>
+    <div class="register-row">
+      <select id="notice-audience" class="reg-input">
+        <option value="all">Everyone (riders + drivers)</option>
+        <option value="riders">Riders only</option>
+        <option value="drivers">Drivers only</option>
+      </select>
+      <input id="notice-title" class="reg-input" maxlength="80" placeholder="Title (e.g. Heavy rain warning)" autocomplete="off" />
+      <input id="notice-body" class="reg-input" maxlength="500" placeholder="Message" autocomplete="off" style="flex:2 1 320px" />
+      <button id="notice-submit" class="reg-btn" onclick="sendNotice()">Send notice</button>
+    </div>
+    <div id="notice-list" class="admin-hint" style="margin-top:10px"></div>
+  </section>
+
+  <section class="register-section">
+    <div class="section-header">
       <h2>Register Driver</h2>
       <span class="register-status" id="reg-status"></span>
     </div>

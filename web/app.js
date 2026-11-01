@@ -113,6 +113,59 @@ function adminLogout() {
   renderAdminState();
 }
 
+async function loadNotices() {
+  const box = document.getElementById('notice-list');
+  if (!box || !adminToken) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/notices`, { headers: { 'Authorization': 'Bearer ' + adminToken } });
+    if (!res.ok) return;
+    const { notices } = await res.json();
+    box.innerHTML = notices.length
+      ? '<strong>Recent notices</strong><br>' + notices.map(n =>
+          `• <b>${escapeHtml(n.title)}</b> (${escapeHtml(n.audience)}) — ${escapeHtml(n.body)} ` +
+          `<a href="#" onclick="deleteNotice('${escapeHtml(n.id)}');return false">remove</a>`).join('<br>')
+      : 'No notices sent yet.';
+  } catch (e) { /* ignore */ }
+}
+
+async function deleteNotice(id) {
+  if (!adminToken || !confirm('Remove this notice from users\' bells?')) return;
+  await fetch(`${API_URL}/api/admin/notices/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'Authorization': 'Bearer ' + adminToken } });
+  loadNotices();
+}
+
+async function sendNotice() {
+  const status = document.getElementById('notice-status');
+  const btn = document.getElementById('notice-submit');
+  if (!adminToken) { status.textContent = 'Sign in as admin first'; status.className = 'register-status error'; return; }
+  const title = document.getElementById('notice-title').value.trim();
+  const body = document.getElementById('notice-body').value.trim();
+  const audience = document.getElementById('notice-audience').value;
+  if (!title || !body) { status.textContent = 'Title and message are required'; status.className = 'register-status error'; return; }
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  try {
+    const res = await fetch(`${API_URL}/api/admin/notices`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+      body: JSON.stringify({ title, body, audience }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { status.textContent = data.error || `Failed (${res.status})`; status.className = 'register-status error'; return; }
+    status.textContent = `Sent to ${data.recipients} user(s); ${data.pushed} phone alert(s) delivered`;
+    status.className = 'register-status ok';
+    document.getElementById('notice-title').value = '';
+    document.getElementById('notice-body').value = '';
+    loadNotices();
+  } catch (e) {
+    status.textContent = 'Could not reach the server';
+    status.className = 'register-status error';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send notice';
+  }
+}
+
 async function registerDriver() {
   const status = document.getElementById('reg-status');
   const btn = document.getElementById('reg-submit');
@@ -184,6 +237,7 @@ async function loadCounts() {
 
 async function loadInitialData() {
   loadCounts();
+  loadNotices();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([

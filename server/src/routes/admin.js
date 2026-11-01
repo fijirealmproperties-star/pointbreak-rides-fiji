@@ -3,11 +3,46 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { onlineRiders } = require('../presence');
+const { sendPush } = require('../push');
 
 module.exports = (db) => {
   const router = express.Router();
 
   router.use(requireAuth, requireRole('admin'));
+
+  // Broadcast a notice to riders, drivers or everyone (in-app bell + push).
+  router.post('/notices', async (req, res) => {
+    const title = String((req.body && req.body.title) || '').trim().slice(0, 80);
+    const body = String((req.body && req.body.body) || '').trim().slice(0, 500);
+    const audience = ['all', 'riders', 'drivers'].includes(req.body && req.body.audience) ? req.body.audience : 'all';
+    if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+
+    const id = uuidv4();
+    db.prepare('INSERT INTO notices (id, title, body, audience) VALUES (?, ?, ?, ?)').run(id, title, body, audience);
+
+    const roles = audience === 'riders' ? ['rider'] : audience === 'drivers' ? ['driver'] : ['rider', 'driver'];
+    const users = db.prepare(
+      `SELECT id FROM users WHERE role IN (${roles.map(() => '?').join(',')})`
+    ).all(...roles);
+    const results = await Promise.all(users.map((u) => sendPush(db, u.id, {
+      title: `📢 ${title}`,
+      body,
+      tag: `notice-${id}`,
+    }).catch(() => 0)));
+    const pushed = results.filter((n) => n > 0).length;
+    res.json({ ok: true, id, recipients: users.length, pushed });
+  });
+
+  router.get('/notices', (req, res) => {
+    const notices = db.prepare('SELECT * FROM notices ORDER BY created_at DESC LIMIT 20').all();
+    res.json({ notices });
+  });
+
+  router.delete('/notices/:id', (req, res) => {
+    db.prepare('DELETE FROM notices WHERE id=?').run(req.params.id);
+    db.prepare('DELETE FROM notice_reads WHERE notice_id=?').run(req.params.id);
+    res.json({ ok: true });
+  });
 
   // Live map data for the admin dashboard (auth required — contains rider phones).
   router.get('/rides/all', (req, res) => {

@@ -14,6 +14,18 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   sub_json TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE IF NOT EXISTS notices (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  audience TEXT NOT NULL DEFAULT 'all',
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS notice_reads (
+  user_id TEXT NOT NULL,
+  notice_id TEXT NOT NULL,
+  PRIMARY KEY (user_id, notice_id)
+);
 `);
   let pub = process.env.VAPID_PUBLIC_KEY;
   let priv = process.env.VAPID_PRIVATE_KEY;
