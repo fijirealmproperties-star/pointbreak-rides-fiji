@@ -13,28 +13,22 @@ function haversine(lat1, lng1, lat2, lng2) {
   return EARTH_RADIUS_KM * c;
 }
 
-// Fiji taxi tariff (FCCC): flag fall FJ$2 day / FJ$3 night / FJ$5 airport,
+// Fiji taxi tariff (FCCC): flag fall FJ$2 day / FJ$3 night,
 // 14c per 100 m, 18c per minute of waiting.
 const DAY_FLAG_FALL = 2.0;
 const NIGHT_FLAG_FALL = 3.0;
-const AIRPORT_FLAG_FALL = 5.0;
 const BASE_FARE = DAY_FLAG_FALL;
 const PER_KM_RATE = 1.4;
 const PER_MIN_RATE = 0.18;
 const MIN_FARE = 0;
 const NIGHT_START_HOUR = 22;
 const NIGHT_END_HOUR = 5;
-const AIRPORT = { lat: -17.7554, lng: 177.4434, radiusKm: 2.5 };
 
 function fijiHour(date = new Date()) {
   return (date.getUTCHours() + 12) % 24;
 }
 
-function flagFallFor({ pickupLat, pickupLng, at } = {}) {
-  if (Number.isFinite(pickupLat) && Number.isFinite(pickupLng) &&
-      haversine(pickupLat, pickupLng, AIRPORT.lat, AIRPORT.lng) <= AIRPORT.radiusKm) {
-    return { amount: AIRPORT_FLAG_FALL, type: 'airport' };
-  }
+function flagFallFor({ at } = {}) {
   const h = fijiHour(at);
   if (h >= NIGHT_START_HOUR || h < NIGHT_END_HOUR) return { amount: NIGHT_FLAG_FALL, type: 'night' };
   return { amount: DAY_FLAG_FALL, type: 'day' };

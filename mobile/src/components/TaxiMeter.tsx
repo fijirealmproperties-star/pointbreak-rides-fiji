@@ -26,7 +26,7 @@ export default function TaxiMeter({ ride }: { ride: Ride }) {
         </View>
       </View>
       <Text style={styles.tariff}>
-        Flag fall FJ$2 day · FJ$3 night · FJ$5 airport · FJ$0.14 / 100 m · FJ$0.18 / min waiting
+        Flag fall FJ$2 day · FJ$3 night · FJ$0.14 / 100 m · FJ$0.18 / min waiting
         {typeof ride.meter_wait_min === "number" ? ` (waited ${fmtDuration(ride.meter_wait_min)})` : ""}
       </Text>
     </View>
