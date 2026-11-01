@@ -7,6 +7,7 @@ const idOf = (data) => data && (data.ride_id || data.rideId);
 const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 
 const stopSince = new Map();
+const anchors = new Map();
 
 function setupSocket(io, matchingEngine, db) {
   io.on('connection', (socket) => {
@@ -121,17 +122,31 @@ function setupSocket(io, matchingEngine, db) {
            FROM rides WHERE id=?`
         ).get(rideId);
         const sinceLast = row && row.since_last != null ? Number(row.since_last) : 0;
-        if (Number.isFinite(prev.driver_lat) && Number.isFinite(prev.driver_lng)) {
-          const delta = haversine(prev.driver_lat, prev.driver_lng, lat, lng);
-          if (delta >= 0.005 && delta <= 2) meterDistanceKm += delta;
-          if (sinceLast > 0 && sinceLast < 5) {
-            const calcSpeed = delta >= 0.005 ? delta / (sinceLast / 60) : 0;
-            const gpsSpeed = Number(data && data.speed);
-            speedKmh = Number.isFinite(gpsSpeed) && gpsSpeed >= 0 ? gpsSpeed * 3.6 : calcSpeed;
-            if (speedKmh > 200) speedKmh = 0;
-            if (speedKmh < 10) meterWaitMin += sinceLast;
-          }
+        // Anchor-based movement: GPS jitter while parked never moves the meter. Distance only
+        // counts once the car has moved clearly beyond the GPS error from the last anchor.
+        const nowMs = Date.now();
+        const acc = Number(data && data.accuracy);
+        const thresholdKm = Math.max(0.025, Number.isFinite(acc) && acc > 0 ? (acc * 1.5) / 1000 : 0);
+        let anchor = anchors.get(rideId);
+        if (!anchor) {
+          anchor = { lat, lng, t: nowMs, speed: 0 };
+          anchors.set(rideId, anchor);
         }
+        const d = haversine(anchor.lat, anchor.lng, lat, lng);
+        if (d > 2) {
+          anchors.set(rideId, { lat, lng, t: nowMs, speed: 0 });
+          anchor = anchors.get(rideId);
+        } else if (d >= thresholdKm) {
+          const hours = Math.max((nowMs - anchor.t) / 3600000, 1 / 3600);
+          const spd = d / hours;
+          meterDistanceKm += d;
+          anchor = { lat, lng, t: nowMs, speed: spd > 200 ? 0 : spd };
+          anchors.set(rideId, anchor);
+        } else if (nowMs - anchor.t > 12000) {
+          anchor.speed = 0;
+        }
+        speedKmh = anchor.speed;
+        if (sinceLast > 0 && sinceLast < 5 && speedKmh < 10) meterWaitMin += sinceLast;
         if (speedKmh < 10) {
           if (!stopSince.has(rideId)) stopSince.set(rideId, Date.now());
           stoppedSec = Math.round((Date.now() - stopSince.get(rideId)) / 1000);
