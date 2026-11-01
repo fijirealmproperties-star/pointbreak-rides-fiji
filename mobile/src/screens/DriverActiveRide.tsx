@@ -212,6 +212,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
           lat: position.lat,
           lng: position.lng,
           accuracy: position.accuracy,
+          speed: position.speed,
         });
         api("/drivers/location", {
           method: "POST",

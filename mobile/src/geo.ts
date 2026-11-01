@@ -40,7 +40,7 @@ export function interpolatePoint(
   };
 }
 
-export type CurrentLocation = { lat: number; lng: number; accuracy: number };
+export type CurrentLocation = { lat: number; lng: number; accuracy: number; speed?: number | null };
 
 function browserLocationError(error: GeolocationPositionError): Error {
   if (error.code === error.PERMISSION_DENIED) {
@@ -70,7 +70,7 @@ export function watchCurrentLocation(
     const watchId = navigator.geolocation.watchPosition(
       (position) => {
         if (!active) return;
-        const { latitude, longitude, accuracy } = position.coords;
+        const { latitude, longitude, accuracy, speed } = position.coords;
         if (
           !Number.isFinite(latitude) ||
           !Number.isFinite(longitude) ||
@@ -85,7 +85,7 @@ export function watchCurrentLocation(
           onError?.(new Error(`GPS accuracy is about ${Math.round(accuracy)} m. Move outdoors for a better signal.`));
           return;
         }
-        onPosition({ lat: latitude, lng: longitude, accuracy });
+        onPosition({ lat: latitude, lng: longitude, accuracy, speed: Number.isFinite(speed as number) ? speed : null });
       },
       (error) => {
         if (active) onError?.(browserLocationError(error));
@@ -116,7 +116,7 @@ export function watchCurrentLocation(
           distanceInterval: 0,
         },
         (position) => {
-          const { latitude, longitude, accuracy } = position.coords;
+          const { latitude, longitude, accuracy, speed } = position.coords;
           if (!active) return;
           if (
             !Number.isFinite(latitude) ||
@@ -133,7 +133,7 @@ export function watchCurrentLocation(
             onError?.(new Error(`GPS accuracy is about ${Math.round(accuracy)} m. Move outdoors for a better signal.`));
             return;
           }
-          onPosition({ lat: latitude, lng: longitude, accuracy });
+          onPosition({ lat: latitude, lng: longitude, accuracy, speed: speed != null && Number.isFinite(speed) ? speed : null });
         }
       );
       if (!active) subscription.remove();

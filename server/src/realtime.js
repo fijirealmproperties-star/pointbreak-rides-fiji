@@ -126,7 +126,9 @@ function setupSocket(io, matchingEngine, db) {
         // counts once the car has moved clearly beyond the GPS error from the last anchor.
         const nowMs = Date.now();
         const acc = Number(data && data.accuracy);
-        const thresholdKm = Math.max(0.025, Number.isFinite(acc) && acc > 0 ? (acc * 1.5) / 1000 : 0);
+        const thresholdKm = Math.max(0.04, Number.isFinite(acc) && acc > 0 ? (acc * 2) / 1000 : 0);
+        const devSpeed = data && data.speed != null ? Number(data.speed) : NaN;
+        const deviceStill = Number.isFinite(devSpeed) && devSpeed >= 0 && devSpeed * 3.6 < 3;
         let anchor = anchors.get(rideId);
         if (!anchor) {
           anchor = { lat, lng, t: nowMs, speed: 0 };
@@ -136,6 +138,8 @@ function setupSocket(io, matchingEngine, db) {
         if (d > 2) {
           anchors.set(rideId, { lat, lng, t: nowMs, speed: 0 });
           anchor = anchors.get(rideId);
+        } else if (deviceStill) {
+          anchor.speed = 0;
         } else if (d >= thresholdKm) {
           const hours = Math.max((nowMs - anchor.t) / 3600000, 1 / 3600);
           const spd = d / hours;
