@@ -66,6 +66,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       contentContainerStyle={[styles.profileContent, { paddingBottom: insets.bottom + 24 }]}
     >
       <View style={styles.profileHero}>
+        <NoticeBell />
         <View style={styles.profileAvatar}>
           <Text style={styles.profileAvatarText}>{(user.name || user.phone || "P")[0].toUpperCase()}</Text>
         </View>
@@ -243,7 +244,6 @@ function Root() {
       ) : screen.name === "profile" && user ? (
         <ProfileScreen user={user} onLogout={logout} />
       ) : null}
-      {showTab && <NoticeBell />}
       {showTab && <TabBar active={activeTab} onTab={goTab} />}
     </View>
   );
@@ -272,7 +272,7 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: colors.ocean, fontWeight: "800" },
   tabBar: { width: 26, height: 3, borderRadius: 2, backgroundColor: colors.ocean, marginTop: 2 },
   profileContent: { padding: 20 },
-  profileHero: { alignItems: "center", paddingVertical: 24 },
+  profileHero: { alignItems: "center", paddingVertical: 24, alignSelf: "stretch" },
   profileAvatar: {
     width: 84,
     height: 84,

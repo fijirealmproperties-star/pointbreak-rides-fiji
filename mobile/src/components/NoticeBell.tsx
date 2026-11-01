@@ -49,7 +49,7 @@ export default function NoticeBell() {
   return (
     <>
       <TouchableOpacity
-        style={[styles.bell, { top: insets.top + 8 }]}
+        style={styles.bell}
         onPress={openPanel}
         accessibilityLabel="Notifications"
       >
@@ -99,7 +99,8 @@ export default function NoticeBell() {
 const styles = StyleSheet.create({
   bell: {
     position: "absolute",
-    right: 14,
+    top: 0,
+    right: 0,
     zIndex: 50,
     width: 42,
     height: 42,
