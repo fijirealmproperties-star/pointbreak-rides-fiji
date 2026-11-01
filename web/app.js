@@ -275,10 +275,9 @@ let openPopupKey = null;
 function initMap() {
   if (liveMap || typeof L === 'undefined') return;
   liveMap = L.map('live-map').setView([-17.75, 177.9], 8);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19,
-    subdomains: 'abcd',
-    attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 18,
+    attribution: 'Tiles &copy; Esri',
   }).addTo(liveMap);
   mapLayer = L.layerGroup().addTo(liveMap);
 }
