@@ -44,6 +44,7 @@ export default function DriverHome({ onOpenRide }: Props) {
   const [locatingLocation, setLocatingLocation] = useState(true);
   const [startingOnline, setStartingOnline] = useState(false);
   const requestRef = useRef<Ride | null>(null);
+  const wentOnlineRef = useRef(false);
 
   const status: OnlineState = busy ? "busy" : online ? "online" : "offline";
 
@@ -106,7 +107,7 @@ export default function DriverHome({ onOpenRide }: Props) {
           if (d.active_ride_id) {
             setBusy(true);
             onOpenRide(d.active_ride_id);
-          } else if (d.status === "online") {
+          } else if (d.status === "online" && !wentOnlineRef.current) {
             await api("/drivers/status", { method: "POST", body: { online: false } });
             setOnline(false);
           }
@@ -125,7 +126,7 @@ export default function DriverHome({ onOpenRide }: Props) {
         if (ev.active_ride_id) {
           setBusy(true);
           onOpenRide(ev.active_ride_id);
-        } else if (ev.online) {
+        } else if (ev.online && !wentOnlineRef.current) {
           api("/drivers/status", { method: "POST", body: { online: false } }).catch((e: any) => {
             if (mounted) setError(e.message || "Could not reset your online status.");
           });
@@ -237,6 +238,7 @@ export default function DriverHome({ onOpenRide }: Props) {
         await api("/drivers/status", { method: "POST", body: { online: false } });
         const socket = getSocket();
         if (socket) socket.emit("driver_status", { online: false });
+        wentOnlineRef.current = false;
         setOnline(false);
       } catch (e: any) {
         setError(e.message || "Could not update status.");
@@ -257,6 +259,7 @@ export default function DriverHome({ onOpenRide }: Props) {
       await api("/drivers/status", { method: "POST", body: { online: true } });
       const socket = getSocket();
       if (socket) socket.emit("driver_status", { online: true });
+      wentOnlineRef.current = true;
       setOnline(true);
     } catch (e: any) {
       setLocationError(e.message || "Allow location access to go online.");

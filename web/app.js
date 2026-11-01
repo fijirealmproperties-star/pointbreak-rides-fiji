@@ -8,6 +8,44 @@ let drivers = [];
 let adminToken = localStorage.getItem('pb_admin_token') || null;
 let adminUserName = localStorage.getItem('pb_admin_user') || null;
 
+// Access tokens last 15 minutes: refresh silently on 401 so the dashboard keeps working.
+const nativeFetch = window.fetch.bind(window);
+let refreshing = null;
+async function refreshAdminToken() {
+  const refreshToken = localStorage.getItem('pb_admin_refresh');
+  if (!refreshToken) return false;
+  if (!refreshing) {
+    refreshing = nativeFetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    }).then(async (res) => {
+      if (!res.ok) return false;
+      const data = await res.json().catch(() => ({}));
+      if (!data.accessToken) return false;
+      adminToken = data.accessToken;
+      localStorage.setItem('pb_admin_token', adminToken);
+      if (data.refreshToken) localStorage.setItem('pb_admin_refresh', data.refreshToken);
+      return true;
+    }).catch(() => false).finally(() => { setTimeout(() => { refreshing = null; }, 0); });
+  }
+  return refreshing;
+}
+window.fetch = async function (url, opts = {}) {
+  const isAdminApi = typeof url === 'string' && url.includes('/api/admin/');
+  if (!isAdminApi) return nativeFetch(url, opts);
+  const withAuth = () => ({ ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + adminToken } });
+  let res = await nativeFetch(url, withAuth());
+  if (res.status === 401 && await refreshAdminToken()) res = await nativeFetch(url, withAuth());
+  if (res.status === 401 && adminToken) {
+    adminToken = null;
+    localStorage.removeItem('pb_admin_token');
+    localStorage.removeItem('pb_admin_refresh');
+    renderAdminState();
+  }
+  return res;
+};
+
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
@@ -53,6 +91,7 @@ async function adminLogin() {
     adminToken = data.accessToken;
     adminUserName = data.user.name || 'Admin';
     localStorage.setItem('pb_admin_token', adminToken);
+    if (data.refreshToken) localStorage.setItem('pb_admin_refresh', data.refreshToken);
     localStorage.setItem('pb_admin_user', adminUserName);
     renderAdminState();
     loadCounts();
@@ -68,6 +107,7 @@ function adminLogout() {
   adminToken = null;
   adminUserName = null;
   localStorage.removeItem('pb_admin_token');
+  localStorage.removeItem('pb_admin_refresh');
   localStorage.removeItem('pb_admin_user');
   renderAdminState();
 }
