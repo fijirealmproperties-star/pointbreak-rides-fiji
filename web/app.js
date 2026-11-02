@@ -3,6 +3,7 @@ const API_URL = window.location.hostname === 'localhost'
   : window.location.origin;
 
 let socket = null;
+let assigningRideId = null;
 let rides = [];
 let drivers = [];
 let liveRiders = [];
@@ -601,11 +602,19 @@ function renderMap() {
         ${vehicle ? `<div>Vehicle: ${escapeHtml(vehicle)}</div>` : ''}
         ${d.license_plate ? `<div>Plate: ${escapeHtml(d.license_plate)}</div>` : ''}
         <div>Rating: ${escapeHtml(d.rating != null ? Number(d.rating).toFixed(1) : '5.0')} &middot; ${d.trips || 0} trips</div>
+        ${assigningRideId && d.status === 'online' ? `<button class="reg-btn" style="margin-top:6px;width:100%" onclick="assignDriver('${escapeHtml(d.id)}')">‚úÖ Assign to booking</button>` : ''}
         ${ride ? `<div class="map-popup-ride">On ride: ${escapeHtml(ride.pickup_place || '')} &rarr; ${escapeHtml(ride.dropoff_place || '')} (${escapeHtml(statusLabel(ride.status))})</div>` : ''}
       </div>`;
     addMarker('d:' + d.id, d.lat, d.lng, 'üöó', html);
     points.push([d.lat, d.lng]);
   });
+
+  const assigning = assigningRideId && rides.find(x => x.id === assigningRideId);
+  if (assigning && validPoint(assigning.pickup_lat, assigning.pickup_lng)) {
+    addMarker('a:' + assigning.id, assigning.pickup_lat, assigning.pickup_lng, 'üßç',
+      `<div class="map-popup"><strong>Booking pickup</strong><div>${escapeHtml(assigning.rider_name || 'Rider')}</div><div>${escapeHtml(assigning.pickup_place || '')}</div></div>`);
+    points.push([assigning.pickup_lat, assigning.pickup_lng]);
+  }
 
   activeRides.forEach(r => {
     const info = `
@@ -786,7 +795,7 @@ function parseDbUtc(s) {
 }
 
 function fmtFijiDateTime(d) {
-  if (!d) return 'ó';
+  if (!d) return 'ÔøΩ';
   return d.toLocaleString('en-FJ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
 }
 
@@ -821,7 +830,7 @@ function renderScheduled() {
   if (!list) return;
   const seen = getSeenSched();
   const sched = rides.filter(r => r.scheduled_at);
-  const upcoming = sched.filter(r => r.status === 'scheduled')
+  const upcoming = sched.filter(r => r.status === 'scheduled' || r.status === 'requested')
     .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)));
   const past = sched.filter(r => r.status !== 'scheduled')
     .sort((a, b) => String(b.scheduled_at).localeCompare(String(a.scheduled_at))).slice(0, 10);
@@ -832,7 +841,7 @@ function renderScheduled() {
   const box = document.getElementById('sched-alert');
   if (fresh.length) {
     box.style.display = 'block';
-    box.innerHTML = `?? ${fresh.length} new advance booking${fresh.length > 1 ? 's' : ''} ó ` +
+    box.innerHTML = `?? ${fresh.length} new advance booking${fresh.length > 1 ? 's' : ''} ÔøΩ ` +
       fresh.map(r => `${escapeHtml(r.rider_name || 'Rider')} (${escapeHtml(fmtFijiDateTime(parseDbUtc(r.scheduled_at)))})`).join('; ') +
       ` <button class="reg-btn" style="margin-left:8px" onclick="ackSched()">Mark as seen</button>`;
     const brandNew = fresh.filter(r => !schedAlerted.has(r.id));
@@ -843,7 +852,7 @@ function renderScheduled() {
         if (window.Notification && Notification.permission === 'granted') {
           const r = brandNew[0];
           new Notification('New advance booking', {
-            body: `${r.rider_name || 'Rider'} ∑ ${fmtFijiDateTime(parseDbUtc(r.scheduled_at))}\n${r.pickup_place} ? ${r.dropoff_place}`,
+            body: `${r.rider_name || 'Rider'} ÔøΩ ${fmtFijiDateTime(parseDbUtc(r.scheduled_at))}\n${r.pickup_place} ? ${r.dropoff_place}`,
           });
         } else if (window.Notification && Notification.permission === 'default') {
           Notification.requestPermission();
@@ -865,9 +874,10 @@ function renderScheduled() {
         <span class="status-badge ${escapeHtml(r.status)}">${statusLabel(r.status)}</span>
       </div>
       <div><strong>?? Pickup time:</strong> ${escapeHtml(when)}</div>
-      <div><strong>?? Rider:</strong> ${escapeHtml(r.rider_name || 'Unknown')} ∑ ?? ${escapeHtml(r.rider_phone || 'ó')}${r.rider_email ? ' ∑ ?? ' + escapeHtml(r.rider_email) : ''}</div>
-      <div><strong>?? Pick up from:</strong> ${escapeHtml(r.pickup_place || 'ó')}${map(r.pickup_lat, r.pickup_lng)}</div>
-      <div><strong>?? Drop off:</strong> ${escapeHtml(r.dropoff_place || 'ó')}${map(r.dropoff_lat, r.dropoff_lng)}</div>
+      <div><strong>?? Rider:</strong> ${escapeHtml(r.rider_name || 'Unknown')} ÔøΩ ?? ${escapeHtml(r.rider_phone || 'ÔøΩ')}${r.rider_email ? ' ÔøΩ ?? ' + escapeHtml(r.rider_email) : ''}</div>
+      <div><strong>?? Pick up from:</strong> ${escapeHtml(r.pickup_place || 'ÔøΩ')}${map(r.pickup_lat, r.pickup_lng)}</div>
+      <div><strong>?? Drop off:</strong> ${escapeHtml(r.dropoff_place || 'ÔøΩ')}${map(r.dropoff_lat, r.dropoff_lng)}</div>
+      ${(r.status === 'scheduled' || (r.status === 'requested' && r.scheduled_at)) ? `<div style="margin:6px 0">${r.driver_name ? `üöó Offered to <strong>${escapeHtml(r.driver_name)}</strong> ‚Äî waiting for them to accept. ` : ''}<button class="reg-btn" onclick="startAssign('${escapeHtml(r.id)}')">${assigningRideId === r.id ? 'Pick a car on the map‚Ä¶' : (r.driver_name ? 'Reassign driver' : 'üöó Assign a driver')}</button></div>` : ''}
       <div class="ride-details">
         <span>FJ$${Number(r.fare || 0).toFixed(2)}</span>
         ${r.distance_km ? `<span>${Number(r.distance_km).toFixed(1)} km</span>` : ''}
@@ -879,4 +889,50 @@ function renderScheduled() {
 
   list.innerHTML = (upcoming.length ? upcoming.map(card).join('') : '<p class="empty">No upcoming advance bookings.</p>') +
     (past.length ? '<h3 style="margin:14px 0 6px">Earlier bookings</h3>' + past.map(card).join('') : '');
+}
+
+// ---- Assign a driver to a booking ----
+
+function startAssign(rideId) {
+  assigningRideId = rideId;
+  const r = rides.find(x => x.id === rideId);
+  const bar = document.getElementById('assign-bar');
+  if (bar) {
+    bar.style.display = 'block';
+    bar.innerHTML = `Assigning a driver to <strong>${escapeHtml((r && r.rider_name) || 'rider')}</strong> (${escapeHtml(r ? fmtFijiDateTime(parseDbUtc(r.scheduled_at)) : '')}). ` +
+      `Click a free ?? on the map, then <em>Assign to booking</em>. <button class="reg-btn reg-btn-ghost" onclick="cancelAssign()">Cancel</button>`;
+  }
+  renderScheduled();
+  renderMap();
+  const m = document.querySelector('.map-section');
+  if (m) m.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cancelAssign() {
+  assigningRideId = null;
+  const bar = document.getElementById('assign-bar');
+  if (bar) bar.style.display = 'none';
+  renderScheduled();
+  renderMap();
+}
+
+async function assignDriver(driverId) {
+  if (!assigningRideId) return;
+  const d = drivers.find(x => x.id === driverId);
+  const r = rides.find(x => x.id === assigningRideId);
+  if (!confirm(`Assign ${d ? d.full_name : 'this driver'} to ${r ? r.rider_name : 'this booking'}?`)) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/rides/${encodeURIComponent(assigningRideId)}/assign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+      body: JSON.stringify({ driver_id: driverId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Could not assign driver'); return; }
+    alert('Driver assigned. They have received the booking request and the rider can see them.');
+    cancelAssign();
+    pollData();
+  } catch (e) {
+    alert('Network error ÔøΩ try again.');
+  }
 }

@@ -74,7 +74,7 @@ const db = new SQLiteWrapper(DB_PATH);
   app.use('/api/riders', require('./src/routes/riders'));
   app.use('/api/push', require('./src/routes/push')(db));
   app.use('/api/notices', require('./src/routes/notices')(db));
-  app.use('/api/admin', require('./src/routes/admin')(db));
+  app.use('/api/admin', require('./src/routes/admin')(db, matchingEngine));
 
   // Admin dashboard (static, talks to the API on the same origin).
   app.use('/admin', express.static(ADMIN_DIR));

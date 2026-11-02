@@ -6,7 +6,7 @@ const { onlineRiders } = require('../presence');
 const { sendPush } = require('../push');
 const { normEmail, validEmail, mailConfigured } = require('../verify');
 
-module.exports = (db) => {
+module.exports = (db, matchingEngine) => {
   const router = express.Router();
 
   router.use(requireAuth, requireRole('admin'));
@@ -55,6 +55,15 @@ module.exports = (db) => {
       ORDER BY r.requested_at DESC
     `).all();
     res.json({ rides });
+  });
+
+  // Manually assign a free driver to an advance booking.
+  router.post('/rides/:id/assign', (req, res) => {
+    const driverId = req.body && req.body.driver_id;
+    if (!driverId) return res.status(400).json({ error: 'driver_id is required' });
+    const out = matchingEngine.assignScheduled(req.params.id, driverId);
+    if (out.error) return res.status(out.code || 400).json({ error: out.error });
+    res.json({ ride: out.ride });
   });
 
   router.get('/riders/live', (req, res) => {

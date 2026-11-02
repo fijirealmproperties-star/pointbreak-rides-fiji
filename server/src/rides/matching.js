@@ -189,28 +189,42 @@ class MatchingEngine {
     return cleared;
   }
 
-  // Booked-ahead rides go out to drivers shortly before pickup time.
-  dispatchScheduled() {
-    const rows = this.db.prepare(
-      "SELECT * FROM rides WHERE status='scheduled' AND scheduled_at <= datetime('now', ?)"
-    ).all(`+${DISPATCH_LEAD_MINUTES} minutes`);
-    for (const ride of rows) {
-      this.db.prepare("UPDATE rides SET status='requested', requested_at=datetime('now') WHERE id=?").run(ride.id);
-      sendPush(this.db, ride.rider_id, {
-        title: '🚗 Finding your driver',
-        body: `Your booked ride to ${ride.dropoff_place} is being dispatched.`,
-        tag: `ride-${ride.id}`,
-      }).catch(() => {});
-      this.matchRide(ride.id, ride.pickup_lat, ride.pickup_lng);
+  // Booked-ahead rides are assigned by an admin, who picks a free driver.
+  // The driver receives the booking as a normal ride request.
+  assignScheduled(rideId, driverId) {
+    const ride = this.db.prepare('SELECT * FROM rides WHERE id=?').get(rideId);
+    if (!ride || !ride.scheduled_at) return { error: 'Not a booked ride', code: 404 };
+    const pending = this.pendingMatches.get(rideId);
+    const reassign = ride.status === 'requested' && pending && pending.manual;
+    if (ride.status !== 'scheduled' && !reassign) return { error: 'This booking can no longer be assigned', code: 409 };
+    const driver = this.db.prepare('SELECT * FROM drivers WHERE id=?').get(driverId);
+    if (!driver) return { error: 'Driver not found', code: 404 };
+    if (driver.status !== 'online' || this.busyDrivers.has(driverId)) {
+      return { error: 'That driver is not free right now', code: 409 };
     }
-    return rows.length;
-  }
+    if (reassign && pending.driverId && pending.driverId !== driverId) {
+      this._emitToDriver(pending.driverId, 'ride_cancelled', { ride_id: rideId });
+    }
 
+    this.db.prepare("UPDATE rides SET status='requested', driver_id=?, driver_lat=?, driver_lng=?, requested_at=datetime('now') WHERE id=?")
+      .run(driverId, driver.lat == null ? null : driver.lat, driver.lng == null ? null : driver.lng, rideId);
+    this.pendingMatches.set(rideId, { driverId, timeout: null, attempt: 0, manual: true });
+
+    const fresh = loadRide(this.db, rideId);
+    this._emitToDriver(driverId, 'ride_request', rideEnvelope(rideForDriver(fresh)));
+    this._pushRideRequest(driverId, fresh);
+    this._emitToUser(ride.rider_id, 'ride_status', rideEnvelope(fresh));
+    sendPush(this.db, ride.rider_id, {
+      title: '✅ Driver assigned',
+      body: `${driver.full_name || 'Your driver'} will pick you up for your booked ride.`,
+      tag: `ride-${rideId}`,
+    }).catch(() => {});
+    return { ride: fresh };
+  }
   startSweeper(intervalMs = 15000) {
     if (this.sweepTimer) return;
     this.sweepTimer = setInterval(() => {
       try {
-        this.dispatchScheduled();
         this.sweepStaleRequests();
         this.sweepStaleTrips();
       } catch (e) {
@@ -396,6 +410,13 @@ class MatchingEngine {
     if (pending && pending.driverId === driverId) {
       clearTimeout(pending.timeout);
       this.pendingMatches.delete(rideId);
+    }
+
+    const declinedRide = this.db.prepare('SELECT * FROM rides WHERE id=?').get(rideId);
+    if (declinedRide && declinedRide.scheduled_at && declinedRide.status === 'requested') {
+      this.db.prepare("UPDATE rides SET status='scheduled', driver_id=NULL WHERE id=?").run(rideId);
+      this._emitToUser(declinedRide.rider_id, 'ride_status', rideEnvelope(loadRide(this.db, rideId)));
+      return;
     }
 
     if (!this.declinedRides.has(rideId)) {

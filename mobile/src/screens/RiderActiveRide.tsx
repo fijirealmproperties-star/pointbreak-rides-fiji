@@ -279,6 +279,16 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
 
       <View style={styles.card}>
         {status === "requested" || status === "searching" ? (
+          ride.driver_name ? (
+            <View style={styles.statusBlock}>
+              <PulseDot color={colors.green} />
+              <Text style={[styles.statusTitle, { color: colors.green }]}>Driver assigned</Text>
+              <Text style={styles.statusSub}>
+                {ride.driver_name} · {ride.vehicle_model || ride.vehicle_type || "—"} · {ride.license_plate || ""}
+                {"\n"}Waiting for your driver to confirm the booking.
+              </Text>
+            </View>
+          ) : (
           <View style={styles.statusBlock}>
             <PulseDot color={colors.sky} />
             <Text style={[styles.statusTitle, { color: colors.sky }]}>Looking for a driver…</Text>
@@ -286,6 +296,7 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
               A driver near {ride.pickup_place} will pick this up shortly.
             </Text>
           </View>
+          )
         ) : status === "accepted" ? (
           <View style={styles.statusBlock}>
             <PulseDot color={colors.amber} />
