@@ -535,6 +535,7 @@ function updateDriverInList(driver) {
 }
 
 function renderAll() {
+  renderScheduled();
   renderStats();
   renderRides();
   renderDrivers();
@@ -747,6 +748,7 @@ function renderDrivers() {
 
 function statusLabel(status) {
   const labels = {
+    scheduled: 'Booked',
     requested: 'Searching',
     accepted: 'En Route',
     arrived: 'Waiting',
@@ -774,4 +776,107 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.appendChild(document.createTextNode(String(str)));
   return div.innerHTML;
+}
+
+// ---- Booked in advance ----
+function parseDbUtc(s) {
+  if (!s) return null;
+  const d = new Date(String(s).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? '' : 'Z'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function fmtFijiDateTime(d) {
+  if (!d) return '—';
+  return d.toLocaleString('en-FJ', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+}
+
+function getSeenSched() {
+  try { return new Set(JSON.parse(localStorage.getItem('pb_seen_sched') || '[]')); } catch { return new Set(); }
+}
+
+function beep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [0, 0.25].forEach((t) => {
+      const o = ctx.createOscillator(); const g = ctx.createGain();
+      o.frequency.value = 880; g.gain.value = 0.2;
+      o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.18);
+    });
+  } catch {}
+}
+
+function ackSched() {
+  const seen = getSeenSched();
+  rides.filter(r => r.scheduled_at).forEach(r => seen.add(r.id));
+  localStorage.setItem('pb_seen_sched', JSON.stringify([...seen]));
+  const box = document.getElementById('sched-alert');
+  if (box) box.style.display = 'none';
+  renderScheduled();
+}
+
+let schedAlerted = new Set();
+function renderScheduled() {
+  const list = document.getElementById('sched-list');
+  if (!list) return;
+  const seen = getSeenSched();
+  const sched = rides.filter(r => r.scheduled_at);
+  const upcoming = sched.filter(r => r.status === 'scheduled')
+    .sort((a, b) => String(a.scheduled_at).localeCompare(String(b.scheduled_at)));
+  const past = sched.filter(r => r.status !== 'scheduled')
+    .sort((a, b) => String(b.scheduled_at).localeCompare(String(a.scheduled_at))).slice(0, 10);
+  const fresh = upcoming.filter(r => !seen.has(r.id));
+
+  document.getElementById('sched-count').textContent = `${upcoming.length} upcoming`;
+
+  const box = document.getElementById('sched-alert');
+  if (fresh.length) {
+    box.style.display = 'block';
+    box.innerHTML = `?? ${fresh.length} new advance booking${fresh.length > 1 ? 's' : ''} — ` +
+      fresh.map(r => `${escapeHtml(r.rider_name || 'Rider')} (${escapeHtml(fmtFijiDateTime(parseDbUtc(r.scheduled_at)))})`).join('; ') +
+      ` <button class="reg-btn" style="margin-left:8px" onclick="ackSched()">Mark as seen</button>`;
+    const brandNew = fresh.filter(r => !schedAlerted.has(r.id));
+    if (brandNew.length) {
+      brandNew.forEach(r => schedAlerted.add(r.id));
+      beep();
+      try {
+        if (window.Notification && Notification.permission === 'granted') {
+          const r = brandNew[0];
+          new Notification('New advance booking', {
+            body: `${r.rider_name || 'Rider'} · ${fmtFijiDateTime(parseDbUtc(r.scheduled_at))}\n${r.pickup_place} ? ${r.dropoff_place}`,
+          });
+        } else if (window.Notification && Notification.permission === 'default') {
+          Notification.requestPermission();
+        }
+      } catch {}
+    }
+  } else {
+    box.style.display = 'none';
+  }
+
+  const card = (r) => {
+    const when = fmtFijiDateTime(parseDbUtc(r.scheduled_at));
+    const booked = fmtFijiDateTime(parseDbUtc(r.requested_at));
+    const map = (lat, lng) => (lat != null && lng != null)
+      ? ` <a href="https://www.google.com/maps?q=${encodeURIComponent(lat + ',' + lng)}" target="_blank" rel="noopener">map</a>` : '';
+    return `<div class="ride-card ${escapeHtml(r.status)}" style="margin-bottom:8px">
+      <div class="ride-header">
+        <span class="ride-id">#${escapeHtml(String(r.id).slice(0, 8))}${seen.has(r.id) ? '' : ' ??'}</span>
+        <span class="status-badge ${escapeHtml(r.status)}">${statusLabel(r.status)}</span>
+      </div>
+      <div><strong>?? Pickup time:</strong> ${escapeHtml(when)}</div>
+      <div><strong>?? Rider:</strong> ${escapeHtml(r.rider_name || 'Unknown')} · ?? ${escapeHtml(r.rider_phone || '—')}${r.rider_email ? ' · ?? ' + escapeHtml(r.rider_email) : ''}</div>
+      <div><strong>?? Pick up from:</strong> ${escapeHtml(r.pickup_place || '—')}${map(r.pickup_lat, r.pickup_lng)}</div>
+      <div><strong>?? Drop off:</strong> ${escapeHtml(r.dropoff_place || '—')}${map(r.dropoff_lat, r.dropoff_lng)}</div>
+      <div class="ride-details">
+        <span>FJ$${Number(r.fare || 0).toFixed(2)}</span>
+        ${r.distance_km ? `<span>${Number(r.distance_km).toFixed(1)} km</span>` : ''}
+        <span>Driver: ${escapeHtml(r.driver_name || 'Unassigned')}</span>
+        <span class="ride-time">Booked ${escapeHtml(booked)}</span>
+      </div>
+    </div>`;
+  };
+
+  list.innerHTML = (upcoming.length ? upcoming.map(card).join('') : '<p class="empty">No upcoming advance bookings.</p>') +
+    (past.length ? '<h3 style="margin:14px 0 6px">Earlier bookings</h3>' + past.map(card).join('') : '');
 }

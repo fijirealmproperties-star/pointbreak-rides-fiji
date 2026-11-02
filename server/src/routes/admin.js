@@ -48,7 +48,7 @@ module.exports = (db) => {
   // Live map data for the admin dashboard (auth required — contains rider phones).
   router.get('/rides/all', (req, res) => {
     const rides = db.prepare(`
-      SELECT r.*, d.full_name AS driver_name, u.name AS rider_name, u.phone AS rider_phone
+      SELECT r.*, d.full_name AS driver_name, u.name AS rider_name, u.phone AS rider_phone, u.email AS rider_email
       FROM rides r
       LEFT JOIN drivers d ON d.id = r.driver_id
       LEFT JOIN users u ON u.id = r.rider_id
