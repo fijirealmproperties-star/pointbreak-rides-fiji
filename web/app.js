@@ -183,6 +183,103 @@ async function sendNotice() {
   }
 }
 
+let accounts = [];
+
+async function acctApi(path, method, body) {
+  const res = await fetch(`${API_URL}/api/admin${path}`, {
+    method: method || 'GET',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Failed (${res.status})`);
+  return data;
+}
+
+function acctMsg(text, ok) {
+  const s = document.getElementById('acct-status');
+  s.textContent = text;
+  s.className = 'register-status ' + (ok ? 'ok' : 'error');
+}
+
+async function loadAccounts() {
+  if (!adminToken) return;
+  try {
+    accounts = (await acctApi('/users')).users || [];
+    renderAccounts();
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+function renderAccounts() {
+  const box = document.getElementById('acct-list');
+  if (!box) return;
+  const q = document.getElementById('acct-search').value.trim().toLowerCase();
+  const f = document.getElementById('acct-role').value;
+  const list = accounts.filter(u => {
+    if (f === 'suspended' ? !u.suspended : (f && u.role !== f)) return false;
+    return !q || (u.name || '').toLowerCase().includes(q) || (u.phone || '').toLowerCase().includes(q);
+  });
+  if (!list.length) { box.innerHTML = '<p class="empty">No accounts match.</p>'; return; }
+  box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+    '<tr style="text-align:left"><th>Name</th><th>Phone</th><th>Role</th><th>Trips</th><th>Cancelled</th><th>Joined</th><th>Status</th><th></th></tr>' +
+    list.map(u => {
+      const trips = u.role === 'driver' ? u.rides_as_driver : u.rides_as_rider;
+      const id = escapeHtml(u.id);
+      return `<tr style="border-top:1px solid #2a2f3a">
+        <td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td><td>${escapeHtml(u.role)}</td>
+        <td>${trips || 0}</td><td>${u.cancelled_rides || 0}</td>
+        <td>${escapeHtml((u.created_at || '').slice(0, 10))}</td>
+        <td>${u.suspended ? '⛔ Suspended' : 'Active'}</td>
+        <td><button class="reg-btn reg-btn-ghost" onclick="viewAccount('${id}')">View</button>
+        <button class="reg-btn reg-btn-ghost" onclick="toggleSuspend('${id}')">${u.suspended ? 'Restore' : 'Suspend'}</button>
+        <button class="reg-btn" style="background:#c0392b" onclick="deleteAccount('${id}')">Delete</button></td></tr>`;
+    }).join('') + '</table>';
+}
+
+async function viewAccount(id) {
+  const box = document.getElementById('acct-detail');
+  try {
+    const { user, driver, rides: rs } = await acctApi('/users/' + encodeURIComponent(id));
+    box.innerHTML = `<div class="register-section" style="margin:0">
+      <h3 style="margin:0 0 6px">${escapeHtml(user.name)} · ${escapeHtml(user.role)}</h3>
+      <div class="admin-hint">${escapeHtml(user.phone)} · joined ${escapeHtml((user.created_at || '').slice(0, 10))}
+      ${user.suspended ? ' · ⛔ Suspended: ' + escapeHtml(user.suspended_reason || 'no reason given') : ''}
+      ${driver ? '<br>' + escapeHtml([driver.vehicle_type, driver.vehicle_model, driver.license_plate].filter(Boolean).join(' · ')) + ' · ★ ' + escapeHtml(Number(driver.rating || 5).toFixed(1)) : ''}</div>
+      <h4 style="margin:10px 0 4px">Recent rides</h4>` +
+      (rs.length ? rs.map(r => `<div class="admin-hint">${escapeHtml((r.requested_at || '').slice(0, 16))} · ${escapeHtml(r.pickup_place)} → ${escapeHtml(r.dropoff_place)} · ${escapeHtml(r.status)} · FJ$${escapeHtml(r.final_fare != null ? r.final_fare : r.fare)} · rider ${escapeHtml(r.rider_name || '?')} / driver ${escapeHtml(r.driver_name || '—')}${r.rating ? ' · ★' + escapeHtml(r.rating) : ''}</div>`).join('') : '<div class="admin-hint">No rides.</div>') +
+      '</div>';
+    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function toggleSuspend(id) {
+  const u = accounts.find(x => x.id === id);
+  if (!u) return;
+  let reason = '';
+  if (!u.suspended) {
+    reason = prompt(`Suspend ${u.name}? Enter a reason (optional):`);
+    if (reason === null) return;
+  } else if (!confirm(`Restore ${u.name}'s account?`)) return;
+  try {
+    await acctApi(`/users/${encodeURIComponent(id)}/suspend`, 'POST', { suspended: !u.suspended, reason });
+    acctMsg(u.suspended ? 'Account restored' : 'Account suspended', true);
+    await loadAccounts();
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function deleteAccount(id) {
+  const u = accounts.find(x => x.id === id);
+  if (!u) return;
+  const typed = prompt(`Permanently delete ${u.name} (${u.role})? This cannot be undone.\nType DELETE to confirm:`);
+  if (typed !== 'DELETE') return;
+  try {
+    await acctApi('/users/' + encodeURIComponent(id), 'DELETE');
+    acctMsg(`Deleted ${u.name}`, true);
+    document.getElementById('acct-detail').innerHTML = '';
+    await Promise.all([loadAccounts(), loadInitialData()]);
+  } catch (e) { acctMsg(e.message, false); }
+}
+
 async function registerDriver() {
   const status = document.getElementById('reg-status');
   const btn = document.getElementById('reg-submit');
@@ -255,6 +352,7 @@ async function loadCounts() {
 async function loadInitialData() {
   loadCounts();
   loadNotices();
+  loadAccounts();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([

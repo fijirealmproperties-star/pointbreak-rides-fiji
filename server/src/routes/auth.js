@@ -51,6 +51,7 @@ module.exports = (db) => {
 
       const ok = await bcrypt.compare(password || '', user.password_hash || '');
       if (!ok) return res.status(401).json({ error: 'Invalid phone or password' });
+      if (user.suspended) return res.status(403).json({ error: 'This account has been suspended. Contact Pointbreak support.' });
 
       const payload = { id: user.id, name: user.name, phone: user.phone, role: user.role, created_at: user.created_at };
       if (user.role === 'driver') {
@@ -72,6 +73,7 @@ module.exports = (db) => {
       const decoded = verifyRefreshToken(token);
       const user = db.prepare('SELECT * FROM users WHERE id=?').get(decoded.userId);
       if (!user) return res.status(401).json({ error: 'User not found' });
+      if (user.suspended) return res.status(403).json({ error: 'This account has been suspended. Contact Pointbreak support.' });
 
       const payload = { id: user.id, name: user.name, phone: user.phone, role: user.role };
       if (user.role === 'driver') {

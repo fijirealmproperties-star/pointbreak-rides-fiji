@@ -127,6 +127,25 @@
     </div>
   </section>
 
+  <section class="register-section" id="accounts">
+    <div class="section-header">
+      <h2>👥 Accounts</h2>
+      <span class="register-status" id="acct-status"></span>
+    </div>
+    <div class="register-row">
+      <input id="acct-search" class="reg-input" placeholder="Search name or phone" oninput="renderAccounts()" />
+      <select id="acct-role" class="reg-input" onchange="renderAccounts()">
+        <option value="">Riders &amp; drivers</option>
+        <option value="rider">Riders</option>
+        <option value="driver">Drivers</option>
+        <option value="suspended">Suspended</option>
+      </select>
+      <button class="reg-btn reg-btn-ghost" onclick="loadAccounts()">⟳ Reload</button>
+    </div>
+    <div id="acct-list" style="overflow-x:auto;margin-top:10px"></div>
+    <div id="acct-detail" style="margin-top:12px"></div>
+  </section>
+
   <section class="map-section">
     <div class="section-header">
       <h2>Live Map</h2>

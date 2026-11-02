@@ -64,6 +64,75 @@ module.exports = (db) => {
     res.json({ riders });
   });
 
+  // ---- Account management: list, inspect, suspend and delete riders/drivers ----
+  router.get('/users', (req, res) => {
+    const users = db.prepare(`
+      SELECT u.id, u.name, u.phone, u.role, u.created_at, u.suspended, u.suspended_reason,
+             d.id AS driver_id, d.vehicle_type, d.vehicle_model, d.license_plate, d.status AS driver_status,
+             d.rating AS driver_rating, d.trips AS driver_trips,
+             (SELECT COUNT(*) FROM rides r WHERE r.rider_id = u.id) AS rides_as_rider,
+             (SELECT COUNT(*) FROM rides r WHERE r.rider_id = u.id AND r.status = 'cancelled') AS cancelled_rides,
+             (SELECT COUNT(*) FROM rides r WHERE d.id IS NOT NULL AND r.driver_id = d.id) AS rides_as_driver,
+             (SELECT MAX(r.requested_at) FROM rides r WHERE r.rider_id = u.id OR (d.id IS NOT NULL AND r.driver_id = d.id)) AS last_ride_at
+      FROM users u
+      LEFT JOIN drivers d ON d.user_id = u.id
+      WHERE u.role != 'admin'
+      ORDER BY u.created_at DESC
+    `).all();
+    res.json({ users });
+  });
+
+  router.get('/users/:id', (req, res) => {
+    const user = db.prepare('SELECT id, name, phone, role, created_at, suspended, suspended_reason FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const driver = db.prepare('SELECT * FROM drivers WHERE user_id=?').get(user.id) || null;
+    const rides = db.prepare(`
+      SELECT r.id, r.pickup_place, r.dropoff_place, r.status, r.fare, r.final_fare, r.rating, r.requested_at,
+             d.full_name AS driver_name, u.name AS rider_name
+      FROM rides r
+      LEFT JOIN drivers d ON d.id = r.driver_id
+      LEFT JOIN users u ON u.id = r.rider_id
+      WHERE r.rider_id = ? OR r.driver_id = ?
+      ORDER BY r.requested_at DESC LIMIT 25
+    `).all(user.id, driver ? driver.id : '');
+    res.json({ user, driver, rides });
+  });
+
+  router.post('/users/:id/suspend', (req, res) => {
+    const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(400).json({ error: 'Admin accounts cannot be suspended' });
+    const suspended = req.body && req.body.suspended === false ? 0 : 1;
+    const reason = String((req.body && req.body.reason) || '').trim().slice(0, 300);
+    if (suspended) {
+      db.prepare("UPDATE users SET suspended=1, suspended_reason=?, suspended_at=datetime('now') WHERE id=?").run(reason || null, user.id);
+      db.prepare("UPDATE drivers SET status='offline' WHERE user_id=? AND status='online'").run(user.id);
+    } else {
+      db.prepare('UPDATE users SET suspended=0, suspended_reason=NULL, suspended_at=NULL WHERE id=?').run(user.id);
+    }
+    res.json({ ok: true, suspended: !!suspended });
+  });
+
+  // Permanently removes the account. Ride history is kept for records.
+  router.delete('/users/:id', (req, res) => {
+    const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(400).json({ error: 'Admin accounts cannot be deleted' });
+    if (user.id === req.user.userId) return res.status(400).json({ error: 'You cannot delete your own account' });
+
+    const driver = db.prepare('SELECT id FROM drivers WHERE user_id=?').get(user.id);
+    const active = db.prepare(
+      "SELECT id FROM rides WHERE (rider_id=? OR driver_id=?) AND status IN ('requested','accepted','arrived','picking_up','in_progress') LIMIT 1"
+    ).get(user.id, driver ? driver.id : '');
+    if (active) return res.status(400).json({ error: 'This user has an active ride. Wait for it to finish or cancel it first.' });
+
+    db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM notice_reads WHERE user_id=?').run(user.id);
+    if (driver) db.prepare('DELETE FROM drivers WHERE id=?').run(driver.id);
+    db.prepare('DELETE FROM users WHERE id=?').run(user.id);
+    res.json({ ok: true });
+  });
+
   router.get('/counts', (req, res) => {
     const riders = db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'rider'").get().n;
     const drivers = db.prepare('SELECT COUNT(*) AS n FROM drivers').get().n;
