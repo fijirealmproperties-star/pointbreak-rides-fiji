@@ -35,6 +35,7 @@ type Props = {
   style?: ViewStyle;
   onMapClick?: (p: MapPoint) => void;
   recenterToken?: number;
+  locateBottom?: number;
 };
 
 type LayerBundle = {
@@ -256,6 +257,7 @@ export default function MapView({
   style,
   onMapClick,
   recenterToken,
+  locateBottom = 12,
 }: Props) {
   const [domId] = useState(() => `pb-map-${++mapSeq}`);
   const bundleRef = useRef<MapRuntime | null>(null);
@@ -337,7 +339,7 @@ export default function MapView({
   return (
     <View style={[styles.container, style]}>
       <View nativeID={domId} style={StyleSheet.absoluteFill} />
-      <TouchableOpacity style={styles.locateBtn} onPress={locateMe} accessibilityLabel="Centre on my location">
+      <TouchableOpacity style={[styles.locateBtn, { bottom: locateBottom }]} onPress={locateMe} accessibilityLabel="Centre on my location">
         <Text style={styles.locateIcon}>{locating ? "…" : "➤"}</Text>
       </TouchableOpacity>
     </View>
@@ -348,7 +350,7 @@ const styles = StyleSheet.create({
   locateBtn: {
     position: "absolute",
     right: 12,
-    top: "38%",
+
     width: 44,
     height: 44,
     borderRadius: 22,

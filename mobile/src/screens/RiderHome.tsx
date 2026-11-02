@@ -57,6 +57,7 @@ export default function RiderHome({ onOpenRide }: Props) {
   const [error, setError] = useState("");
   const [locating, setLocating] = useState(false);
   const [recenterToken, setRecenterToken] = useState(0);
+  const [sheetH, setSheetH] = useState(0);
   const [pickerOpen, setPickerOpen] = useState<"pickup" | "dropoff" | null>(null);
   const [pinMode, setPinMode] = useState<"pickup" | "dropoff" | null>(null);
   const [resolvingPin, setResolvingPin] = useState(false);
@@ -452,27 +453,10 @@ export default function RiderHome({ onOpenRide }: Props) {
         markers={markers}
         route={route}
         recenterToken={recenterToken}
+        locateBottom={sheetH + 12}
         onMapClick={pinMode ? handleMapClick : undefined}
         style={StyleSheet.absoluteFill}
       />
-
-      {pinMode || pickup || dropoff ? (
-        <View style={[styles.legend, { top: insets.top + (pinMode ? 70 : 12) }]}>
-          <Text style={styles.legendTitle}>Map legend</Text>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: "#000" }]} />
-            <Text style={styles.legendText}>🧍 Pickup{pinMode === "pickup" ? " (placing)" : ""}</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: "#00C853" }]} />
-            <Text style={styles.legendText}>📍 Drop-off{pinMode === "dropoff" ? " (placing)" : ""}</Text>
-          </View>
-          <View style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: colors.sky }]} />
-            <Text style={styles.legendText}>🚗 Drivers nearby</Text>
-          </View>
-        </View>
-      ) : null}
 
       {pinMode ? (
         <View style={[styles.pinBanner, { top: insets.top + 8 }]}>
@@ -495,7 +479,7 @@ export default function RiderHome({ onOpenRide }: Props) {
       ) : null}
 
       {reqState === "finding" || reqState === "requesting" ? (
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
           <View style={styles.grabber} />
           <View style={styles.findingWrap}>
             <ActivityIndicator size="large" color="#000" />
@@ -507,7 +491,7 @@ export default function RiderHome({ onOpenRide }: Props) {
           </View>
         </View>
       ) : (
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
           <View style={styles.grabber} />
           <ScrollView
             keyboardShouldPersistTaps="handled"

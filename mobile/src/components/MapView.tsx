@@ -32,6 +32,7 @@ type Props = {
   style?: ViewStyle;
   onMapClick?: (p: MapPoint) => void;
   recenterToken?: number;
+  locateBottom?: number;
 };
 
 const HTML = `<!DOCTYPE html>
