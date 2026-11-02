@@ -207,6 +207,7 @@ async function loadAccounts() {
   try {
     accounts = (await acctApi('/users')).users || [];
     renderAccounts();
+    loadCodes();
   } catch (e) { acctMsg(e.message, false); }
 }
 
@@ -217,21 +218,24 @@ function renderAccounts() {
   const f = document.getElementById('acct-role').value;
   const list = accounts.filter(u => {
     if (f === 'suspended' ? !u.suspended : (f && u.role !== f)) return false;
-    return !q || (u.name || '').toLowerCase().includes(q) || (u.phone || '').toLowerCase().includes(q);
+    return !q || [u.name, u.phone, u.email, u.license_plate, u.vehicle_model].some(v => (v || '').toLowerCase().includes(q));
   });
   if (!list.length) { box.innerHTML = '<p class="empty">No accounts match.</p>'; return; }
   box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
-    '<tr style="text-align:left"><th>Name</th><th>Phone</th><th>Role</th><th>Trips</th><th>Cancelled</th><th>Joined</th><th>Status</th><th></th></tr>' +
+    '<tr style="text-align:left"><th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Trips</th><th>Cancelled</th><th>Joined</th><th>Status</th><th></th></tr>' +
     list.map(u => {
       const trips = u.role === 'driver' ? u.rides_as_driver : u.rides_as_rider;
       const id = escapeHtml(u.id);
       return `<tr style="border-top:1px solid #2a2f3a">
-        <td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td><td>${escapeHtml(u.role)}</td>
+        <td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td>
+        <td>${u.email ? escapeHtml(u.email) + (u.email_verified ? ' ✓' : ' (unverified)') : '<span class="admin-hint">none</span>'}</td>
+        <td>${escapeHtml(u.role)}</td>
         <td>${trips || 0}</td><td>${u.cancelled_rides || 0}</td>
         <td>${escapeHtml((u.created_at || '').slice(0, 10))}</td>
         <td>${u.suspended ? '⛔ Suspended' : 'Active'}</td>
         <td><button class="reg-btn reg-btn-ghost" onclick="viewAccount('${id}')">View</button>
         <button class="reg-btn reg-btn-ghost" onclick="messageAccount('${id}')">Message</button>
+        <button class="reg-btn reg-btn-ghost" onclick="setEmail('${id}')">Email</button>
         <button class="reg-btn reg-btn-ghost" onclick="resetPassword('${id}')">Reset password</button>
         <button class="reg-btn reg-btn-ghost" onclick="toggleSuspend('${id}')">${u.suspended ? 'Restore' : 'Suspend'}</button>
         <button class="reg-btn" style="background:#c0392b" onclick="deleteAccount('${id}')">Delete</button></td></tr>`;
@@ -252,6 +256,35 @@ async function viewAccount(id) {
       '</div>';
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) { acctMsg(e.message, false); }
+}
+
+async function setEmail(id) {
+  const u = accounts.find(x => x.id === id);
+  if (!u) return;
+  const email = prompt(`Email for ${u.name} (${u.phone}):`, u.email || '');
+  if (!email) return;
+  try {
+    await acctApi(`/users/${encodeURIComponent(id)}/email`, 'POST', { email });
+    acctMsg('Email saved', true);
+    await loadAccounts();
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function loadCodes() {
+  const box = document.getElementById('code-list');
+  if (!box || !adminToken) return;
+  try {
+    const r = await acctApi('/email-codes');
+    if (r.mailConfigured) { box.innerHTML = '<span class="admin-hint">✉️ Email sending is on — codes go straight to users’ inboxes.</span>'; return; }
+    box.innerHTML = '<div class="admin-hint">✉️ Email sending is not set up yet, so codes appear here. Pass them to the user (valid 15 min).</div>' +
+      (r.codes.length ? r.codes.map(c => `<div style="margin-top:4px"><b style="font-size:16px;letter-spacing:2px">${escapeHtml(c.code)}</b> · ${escapeHtml(c.purpose === 'reset' ? 'password reset' : 'verify email')} · ${escapeHtml(c.name)} (${escapeHtml(c.phone)}) · ${escapeHtml(c.email)}</div>`).join('') : '<div class="admin-hint">No pending codes.</div>');
+  } catch (e) {}
+}
+
+function globalFind() {
+  document.getElementById('acct-search').value = document.getElementById('global-search').value;
+  document.getElementById('acct-role').value = '';
+  renderAccounts();
 }
 
 async function messageAccount(id) {
@@ -319,6 +352,7 @@ async function registerDriver() {
   const vehicle_type = document.getElementById('reg-vehicle-type').value.trim();
   const vehicle_model = document.getElementById('reg-vehicle-model').value.trim();
   const license_plate = document.getElementById('reg-plate').value.trim();
+  const email = document.getElementById('reg-email').value.trim();
 
   if (!name || !phone || !password) { status.textContent = 'Name, phone and password are required'; status.className = 'register-status error'; return; }
 
@@ -328,7 +362,7 @@ async function registerDriver() {
     const res = await fetch(`${API_URL}/api/admin/drivers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
-      body: JSON.stringify({ name, phone, password, vehicle_type, vehicle_model, license_plate }),
+      body: JSON.stringify({ name, phone, password, vehicle_type, vehicle_model, license_plate, email }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) { adminToken = null; localStorage.removeItem('pb_admin_token'); renderAdminState(); status.textContent = 'Admin session expired — sign in again'; status.className = 'register-status error'; return; }

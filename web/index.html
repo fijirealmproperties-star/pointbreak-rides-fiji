@@ -20,6 +20,13 @@
     </div>
   </header>
 
+  <section class="register-section" style="padding-top:10px;padding-bottom:10px">
+    <div class="register-row">
+      <input id="global-search" class="reg-input" style="flex:1" placeholder="🔍 Find any rider or driver — name, phone, email, plate" oninput="globalFind()" onkeydown="if(event.key==='Enter')document.getElementById('accounts').scrollIntoView({behavior:'smooth'})" />
+      <a href="#accounts" class="reg-btn" style="text-decoration:none">Go to Accounts</a>
+    </div>
+  </section>
+
   <section class="stats-bar">
     <div class="stat-card">
       <div class="stat-icon total-icon"></div>
@@ -119,6 +126,7 @@
     <div class="register-row">
       <input id="reg-name" class="reg-input" placeholder="Full name" autocomplete="off" />
       <input id="reg-phone" class="reg-input" placeholder="Phone (e.g. +679…)" autocomplete="off" />
+      <input id="reg-email" class="reg-input" placeholder="Email (for password reset)" autocomplete="off" />
       <input id="reg-password" class="reg-input" type="password" placeholder="Password" autocomplete="off" />
       <input id="reg-vehicle-type" class="reg-input" placeholder="Vehicle type (e.g. Taxi)" autocomplete="off" />
       <input id="reg-vehicle-model" class="reg-input" placeholder="Vehicle model (e.g. Toyota RAV4)" autocomplete="off" />
@@ -133,7 +141,7 @@
       <span class="register-status" id="acct-status"></span>
     </div>
     <div class="register-row">
-      <input id="acct-search" class="reg-input" placeholder="Search name or phone" oninput="renderAccounts()" />
+      <input id="acct-search" class="reg-input" placeholder="Search name, phone, email or plate" oninput="renderAccounts()" />
       <select id="acct-role" class="reg-input" onchange="renderAccounts()">
         <option value="">Riders &amp; drivers</option>
         <option value="rider">Riders</option>
@@ -142,6 +150,7 @@
       </select>
       <button class="reg-btn reg-btn-ghost" onclick="loadAccounts()">⟳ Reload</button>
     </div>
+    <div id="code-list" style="margin-top:8px"></div>
     <div id="acct-list" style="overflow-x:auto;margin-top:10px"></div>
     <div id="acct-detail" style="margin-top:12px"></div>
   </section>

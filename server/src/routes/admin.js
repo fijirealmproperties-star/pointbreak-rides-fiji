@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { onlineRiders } = require('../presence');
 const { sendPush } = require('../push');
+const { normEmail, validEmail, mailConfigured } = require('../verify');
 
 module.exports = (db) => {
   const router = express.Router();
@@ -67,7 +68,7 @@ module.exports = (db) => {
   // ---- Account management: list, inspect, suspend and delete riders/drivers ----
   router.get('/users', (req, res) => {
     const users = db.prepare(`
-      SELECT u.id, u.name, u.phone, u.role, u.created_at, u.suspended, u.suspended_reason,
+      SELECT u.id, u.name, u.phone, u.email, u.email_verified, u.role, u.created_at, u.suspended, u.suspended_reason,
              d.id AS driver_id, d.vehicle_type, d.vehicle_model, d.license_plate, d.status AS driver_status,
              d.rating AS driver_rating, d.trips AS driver_trips,
              (SELECT COUNT(*) FROM rides r WHERE r.rider_id = u.id) AS rides_as_rider,
@@ -126,6 +127,28 @@ module.exports = (db) => {
     res.json({ ok: true, password });
   });
 
+  // Set or fix a user's email (marks it verified) so they can use Forgot password.
+  router.post('/users/:id/email', (req, res) => {
+    const user = db.prepare('SELECT id FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const email = normEmail(req.body && req.body.email);
+    if (!validEmail(email)) return res.status(400).json({ error: 'Invalid email address' });
+    const other = db.prepare('SELECT id FROM users WHERE lower(email)=? AND id!=?').get(email, user.id);
+    if (other) return res.status(409).json({ error: 'Email already used by another account' });
+    db.prepare('UPDATE users SET email=?, email_verified=1 WHERE id=?').run(email, user.id);
+    res.json({ ok: true });
+  });
+
+  // Live codes, only kept readable while no email provider is configured.
+  router.get('/email-codes', (req, res) => {
+    const codes = db.prepare(
+      `SELECT c.purpose, c.email, c.code_plain AS code, c.created_at, u.name, u.phone
+       FROM email_codes c JOIN users u ON u.id = c.user_id
+       WHERE c.code_plain IS NOT NULL AND c.expires_at > ? ORDER BY c.created_at DESC`
+    ).all(Date.now());
+    res.json({ codes, mailConfigured: mailConfigured() });
+  });
+
   router.post('/users/:id/suspend', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });
@@ -156,6 +179,7 @@ module.exports = (db) => {
 
     db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(user.id);
     db.prepare('DELETE FROM notice_reads WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM email_codes WHERE user_id=?').run(user.id);
     if (driver) db.prepare('DELETE FROM drivers WHERE id=?').run(driver.id);
     db.prepare('DELETE FROM users WHERE id=?').run(user.id);
     res.json({ ok: true });
@@ -193,6 +217,11 @@ module.exports = (db) => {
       if (!name || !phone || !password) {
         return res.status(400).json({ error: 'name, phone and password are required' });
       }
+      const email = normEmail(req.body && req.body.email);
+      if (email && !validEmail(email)) return res.status(400).json({ error: 'Invalid email address' });
+      if (email && db.prepare('SELECT id FROM users WHERE lower(email)=?').get(email)) {
+        return res.status(409).json({ error: 'Email already registered to another account' });
+      }
       const existing = db.prepare('SELECT id FROM users WHERE phone=?').get(phone);
       if (existing) return res.status(409).json({ error: 'Phone number already registered' });
 
@@ -200,8 +229,8 @@ module.exports = (db) => {
       const driverId = uuidv4();
       const hashed = await bcrypt.hash(password, 10);
 
-      db.prepare('INSERT INTO users (id, name, phone, password_hash, role) VALUES (?,?,?,?,?)')
-        .run(userId, name, phone, hashed, 'driver');
+      db.prepare('INSERT INTO users (id, name, phone, password_hash, role, email, email_verified) VALUES (?,?,?,?,?,?,1)')
+        .run(userId, name, phone, hashed, 'driver', email || null);
 
       db.prepare(
         'INSERT INTO drivers (id, user_id, full_name, phone, vehicle_type, vehicle_model, license_plate, status, lat, lng, rating, trips) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'

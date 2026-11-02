@@ -20,8 +20,11 @@ type Props = {
 export default function LoginScreen({ onLogin }: Props) {
   const [driverApp, setDriverAppState] = useState(isDriverApp());
   const demo = DEMO_ENABLED;
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "verify" | "forgot" | "reset">("login");
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [info, setInfo] = useState("");
   const [phone, setPhone] = useState(demo && driverApp ? DEMO_DRIVER.phone : "");
   const [password, setPassword] = useState(demo && driverApp ? DEMO_DRIVER.password : "");
   const [error, setError] = useState("");
@@ -31,6 +34,7 @@ export default function LoginScreen({ onLogin }: Props) {
     setDriverAppState(nextDriver);
     setDriverMode(nextDriver);
     setError("");
+    setInfo("");
     setMode("login");
     if (demo) {
       setPhone(nextDriver ? DEMO_DRIVER.phone : DEMO_RIDER.phone);
@@ -38,33 +42,84 @@ export default function LoginScreen({ onLogin }: Props) {
     }
   }
 
+  function goMode(m: typeof mode) {
+    setMode(m);
+    setError("");
+    setInfo("");
+    setCode("");
+  }
+
+  async function finishLogin(d: { accessToken: string; refreshToken?: string; user: User }) {
+    if (driverApp && d.user.role !== "driver") {
+      await clearAuth();
+      setError("That is a rider account. Choose Rider above, or sign in with a driver account.");
+      return;
+    }
+    await setAuth(d.accessToken, d.user, d.refreshToken);
+    onLogin(d.user);
+  }
+
   async function submit(override?: { phone: string; password: string }) {
     setBusy(true);
     setError("");
+    setInfo("");
     try {
-      let d: { accessToken: string; refreshToken?: string; user: User };
-      if (mode === "login" || override) {
-        d = await api<{ accessToken: string; refreshToken?: string; user: User }>("/auth/login", {
-          method: "POST",
-          body: { phone: (override || { phone }).phone, password: (override || { password }).password },
-        });
-      } else {
-        d = await api<{ accessToken: string; refreshToken?: string; user: User }>("/auth/register", {
-          method: "POST",
-          body: { name, phone, password },
-        });
-      }
-      if (driverApp && d.user.role !== "driver") {
-        await clearAuth();
-        setError("That is a rider account. Choose Rider above, or sign in with a driver account.");
+      type Session = { accessToken: string; refreshToken?: string; user: User };
+      if (mode === "forgot") {
+        await api("/auth/forgot-password", { method: "POST", body: { phone, email } });
+        setMode("reset");
+        setPassword("");
+        setInfo("If that phone number and email match, we sent a 6-digit code to your email.");
         return;
       }
-      await setAuth(d.accessToken, d.user, d.refreshToken);
-      onLogin(d.user);
+      if (mode === "reset") {
+        await api("/auth/reset-password", { method: "POST", body: { phone, email, code, password } });
+        setMode("login");
+        setCode("");
+        setInfo("Password changed. Sign in with your new password.");
+        return;
+      }
+      if (mode === "verify") {
+        await finishLogin(await api<Session>("/auth/verify-email", { method: "POST", body: { phone, code } }));
+        return;
+      }
+      if (mode === "register" && !override) {
+        const r = await api<{ needsVerification?: boolean }>("/auth/register", {
+          method: "POST",
+          body: { name, phone, email, password },
+        });
+        if (r.needsVerification) {
+          setMode("verify");
+          setCode("");
+          setInfo("We sent a 6-digit code to your email. Enter it to finish signing up.");
+        }
+        return;
+      }
+      await finishLogin(
+        await api<Session>("/auth/login", {
+          method: "POST",
+          body: { phone: (override || { phone }).phone, password: (override || { password }).password },
+        })
+      );
     } catch (e: any) {
+      if (e.code === "EMAIL_NOT_VERIFIED") {
+        setMode("verify");
+        setCode("");
+        setInfo(e.message);
+        return;
+      }
       setError(e.message || "Something went wrong");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendCode() {
+    try {
+      await api("/auth/resend-code", { method: "POST", body: { phone } });
+      setInfo("A new code was sent.");
+    } catch (e: any) {
+      setError(e.message || "Could not resend code");
     }
   }
 
@@ -150,22 +205,22 @@ export default function LoginScreen({ onLogin }: Props) {
             <View style={styles.driverBadge}>
               <Text style={styles.driverBadgeText}>DRIVER APP</Text>
             </View>
-          ) : (
+          ) : mode === "login" || mode === "register" ? (
             <View style={styles.tabs}>
               <TouchableOpacity
                 style={[styles.tab, mode === "login" && styles.tabActive]}
-                onPress={() => { setMode("login"); setError(""); }}
+                onPress={() => goMode("login")}
               >
                 <Text style={[styles.tabText, mode === "login" && styles.tabTextActive]}>Login</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.tab, mode === "register" && styles.tabActive]}
-                onPress={() => { setMode("register"); setError(""); }}
+                onPress={() => goMode("register")}
               >
                 <Text style={[styles.tabText, mode === "register" && styles.tabTextActive]}>Register</Text>
               </TouchableOpacity>
             </View>
-          )}
+          ) : null}
 
           {mode === "register" && !driverApp ? (
             <>
@@ -180,31 +235,89 @@ export default function LoginScreen({ onLogin }: Props) {
             </>
           ) : null}
 
-          <TextInput
-            style={styles.input}
-            placeholder="Phone (e.g. +679…)"
-            placeholderTextColor={colors.textMuted}
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-          />
-          <TextInput
-            style={styles.input}
-            placeholder="Password"
-            placeholderTextColor={colors.textMuted}
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+          {mode === "verify" ? <Text style={styles.roleLabel}>Verify your email</Text> : null}
+          {mode === "forgot" ? <Text style={styles.roleLabel}>Forgot password</Text> : null}
+          {mode === "reset" ? <Text style={styles.roleLabel}>Set a new password</Text> : null}
 
+          {mode === "login" || mode === "register" || mode === "forgot" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Phone (e.g. +679…)"
+              placeholderTextColor={colors.textMuted}
+              value={phone}
+              onChangeText={setPhone}
+              keyboardType="phone-pad"
+              autoCapitalize="none"
+            />
+          ) : null}
+          {mode === "register" || mode === "forgot" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="Email address"
+              placeholderTextColor={colors.textMuted}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          ) : null}
+          {mode === "verify" || mode === "reset" ? (
+            <TextInput
+              style={styles.input}
+              placeholder="6-digit code from your email"
+              placeholderTextColor={colors.textMuted}
+              value={code}
+              onChangeText={setCode}
+              keyboardType="number-pad"
+              maxLength={6}
+            />
+          ) : null}
+          {mode === "login" || mode === "register" || mode === "reset" ? (
+            <TextInput
+              style={styles.input}
+              placeholder={mode === "reset" ? "New password (min 8 characters)" : "Password"}
+              placeholderTextColor={colors.textMuted}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+          ) : null}
+
+          {info ? <Text style={styles.info}>{info}</Text> : null}
           {error ? <Text style={styles.error}>{error}</Text> : null}
 
           <TouchableOpacity style={styles.btn} onPress={() => submit()} disabled={busy}>
             <Text style={styles.btnText}>
-              {busy ? "Please wait…" : mode === "login" ? (driverApp ? "Sign in as driver" : "Login") : "Create account"}
+              {busy
+                ? "Please wait…"
+                : mode === "login"
+                ? driverApp ? "Sign in as driver" : "Login"
+                : mode === "register"
+                ? "Create account"
+                : mode === "verify"
+                ? "Verify & sign in"
+                : mode === "forgot"
+                ? "Send reset code"
+                : "Reset password"}
             </Text>
           </TouchableOpacity>
+
+          {mode === "login" ? (
+            <TouchableOpacity style={styles.driverLink} onPress={() => goMode("forgot")}>
+              <Text style={styles.driverLinkText}>Forgot password?</Text>
+            </TouchableOpacity>
+          ) : null}
+          {mode === "verify" ? (
+            <TouchableOpacity style={styles.driverLink} onPress={resendCode}>
+              <Text style={styles.driverLinkText}>Resend code</Text>
+            </TouchableOpacity>
+          ) : null}
+          {mode === "verify" || mode === "forgot" || mode === "reset" ? (
+            <TouchableOpacity style={styles.driverLink} onPress={() => goMode("login")}>
+              <Text style={styles.driverLinkText}>Back to login</Text>
+            </TouchableOpacity>
+          ) : null}
 
           {demo ? (
             <>
@@ -335,6 +448,7 @@ const styles = StyleSheet.create({
   driverLink: { marginTop: 14, alignItems: "center", paddingVertical: 8 },
   driverLinkText: { color: colors.sky, fontWeight: "700", fontSize: typography.small, textDecorationLine: "underline" },
   error: { color: colors.coral, marginBottom: 10, fontSize: typography.small },
+  info: { color: colors.sky, marginBottom: 10, fontSize: typography.small },
   demo: { color: colors.textMuted, fontSize: typography.tiny, marginTop: 16, textAlign: "center", lineHeight: 16 },
   swellFooter: { alignItems: "center", marginTop: 18 },
   swellText: { color: colors.sky, fontSize: typography.small, opacity: 0.8 },

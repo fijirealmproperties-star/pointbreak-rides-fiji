@@ -89,6 +89,8 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'rides', 'final_distance_km', 'REAL');
   ensureColumn(db, 'rides', 'final_duration_min', 'REAL');
   ensureColumn(db, 'users', 'suspended', 'INTEGER DEFAULT 0');
+  ensureColumn(db, 'users', 'email', 'TEXT');
+  ensureColumn(db, 'users', 'email_verified', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'users', 'suspended_reason', 'TEXT');
   ensureColumn(db, 'users', 'suspended_at', 'TEXT');
 }

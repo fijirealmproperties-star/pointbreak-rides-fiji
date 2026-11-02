@@ -28,6 +28,7 @@ const db = new SQLiteWrapper(DB_PATH);
   await db.ready;
   initSchema(db);
   require('./src/push').initPush(db);
+  require('./src/verify').initVerify(db);
   try {
     const result = await seedData(db);
     if (result.seeded && result.demo) console.log('Seeded demo data (fresh database).');

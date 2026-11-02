@@ -254,7 +254,11 @@ export async function api<T = any>(
       throw new Error("Ride service returned an invalid response. Please try again later.");
     }
   }
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) {
+    const err: any = new Error(data.error || `Request failed (${res.status})`);
+    err.code = data.code;
+    throw err;
+  }
   return data as T;
 }
 
