@@ -98,6 +98,34 @@ module.exports = (db) => {
     res.json({ user, driver, rides });
   });
 
+  // Private message to one user (bell + push).
+  router.post('/users/:id/message', async (req, res) => {
+    const user = db.prepare('SELECT id, role FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    const title = String((req.body && req.body.title) || '').trim().slice(0, 80);
+    const body = String((req.body && req.body.body) || '').trim().slice(0, 500);
+    if (!title || !body) return res.status(400).json({ error: 'Title and message are required' });
+    const id = uuidv4();
+    db.prepare('INSERT INTO notices (id, title, body, audience) VALUES (?, ?, ?, ?)').run(id, title, body, 'user:' + user.id);
+    const pushed = await sendPush(db, user.id, { title: `💬 ${title}`, body, tag: `notice-${id}` }).catch(() => 0);
+    res.json({ ok: true, id, pushed: pushed > 0 });
+  });
+
+  // Passwords are hashed and cannot be read; set a temporary one to help a locked-out user.
+  router.post('/users/:id/reset-password', async (req, res) => {
+    const user = db.prepare('SELECT id, role FROM users WHERE id=?').get(req.params.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.role === 'admin') return res.status(400).json({ error: 'Admin passwords cannot be reset here' });
+    let password = String((req.body && req.body.password) || '').trim();
+    if (!password) {
+      const chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+      password = Array.from(require('crypto').randomBytes(8), (b) => chars[b % chars.length]).join('');
+    }
+    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(await bcrypt.hash(password, 10), user.id);
+    res.json({ ok: true, password });
+  });
+
   router.post('/users/:id/suspend', (req, res) => {
     const user = db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
     if (!user) return res.status(404).json({ error: 'User not found' });

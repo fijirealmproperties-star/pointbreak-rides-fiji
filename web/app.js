@@ -231,6 +231,8 @@ function renderAccounts() {
         <td>${escapeHtml((u.created_at || '').slice(0, 10))}</td>
         <td>${u.suspended ? '⛔ Suspended' : 'Active'}</td>
         <td><button class="reg-btn reg-btn-ghost" onclick="viewAccount('${id}')">View</button>
+        <button class="reg-btn reg-btn-ghost" onclick="messageAccount('${id}')">Message</button>
+        <button class="reg-btn reg-btn-ghost" onclick="resetPassword('${id}')">Reset password</button>
         <button class="reg-btn reg-btn-ghost" onclick="toggleSuspend('${id}')">${u.suspended ? 'Restore' : 'Suspend'}</button>
         <button class="reg-btn" style="background:#c0392b" onclick="deleteAccount('${id}')">Delete</button></td></tr>`;
     }).join('') + '</table>';
@@ -249,6 +251,31 @@ async function viewAccount(id) {
       (rs.length ? rs.map(r => `<div class="admin-hint">${escapeHtml((r.requested_at || '').slice(0, 16))} · ${escapeHtml(r.pickup_place)} → ${escapeHtml(r.dropoff_place)} · ${escapeHtml(r.status)} · FJ$${escapeHtml(r.final_fare != null ? r.final_fare : r.fare)} · rider ${escapeHtml(r.rider_name || '?')} / driver ${escapeHtml(r.driver_name || '—')}${r.rating ? ' · ★' + escapeHtml(r.rating) : ''}</div>`).join('') : '<div class="admin-hint">No rides.</div>') +
       '</div>';
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function messageAccount(id) {
+  const u = accounts.find(x => x.id === id);
+  if (!u) return;
+  const title = prompt(`Message to ${u.name} — title:`);
+  if (!title || !title.trim()) return;
+  const body = prompt('Message:');
+  if (!body || !body.trim()) return;
+  try {
+    const r = await acctApi(`/users/${encodeURIComponent(id)}/message`, 'POST', { title, body });
+    acctMsg(`Sent to ${u.name}${r.pushed ? ' (phone alert sent)' : ' (in their 🔔 bell)'}`, true);
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function resetPassword(id) {
+  const u = accounts.find(x => x.id === id);
+  if (!u) return;
+  const custom = prompt(`Reset password for ${u.name}.\nType a new password (min 6 chars), or leave blank to generate one:`);
+  if (custom === null) return;
+  try {
+    const r = await acctApi(`/users/${encodeURIComponent(id)}/reset-password`, 'POST', { password: custom });
+    alert(`New password for ${u.name} (${u.phone}):\n\n${r.password}\n\nGive it to the user and ask them to sign in.`);
+    acctMsg(`Password reset for ${u.name}`, true);
   } catch (e) { acctMsg(e.message, false); }
 }
 
