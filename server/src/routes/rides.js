@@ -4,6 +4,7 @@ const { requireAuth, requireRole } = require('../middleware/auth');
 const { haversine, calculateFare, computeRoutePath } = require('../rides/fare');
 const { getRoadRoute } = require('../rides/routing');
 const { loadRide, rideForDriver } = require('../rides/ride-utils');
+const { cancellationFee } = require('../rides/matching');
 
 const AVG_SPEED_KMH = 30;
 // Demo/testing builds may reveal a ride's pickup code to its assigned driver.
@@ -92,7 +93,20 @@ module.exports = (db, io, matchingEngine) => {
       const id = uuidv4();
       const pickupCode = String(Math.floor(1000 + Math.random() * 9000));
 
-      db.prepare('INSERT INTO rides (id, rider_id, pickup_place, dropoff_place, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, fare, currency, status, distance_km, duration_min, path_json, pickup_code, quoted_fare, meter_distance_km, meter_fare) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      let scheduledAt = null;
+      if (body.scheduled_at) {
+        const t = Date.parse(body.scheduled_at);
+        if (!Number.isFinite(t)) return res.status(400).json({ error: 'Invalid booking date/time' });
+        if (t < Date.now() + 10 * 60 * 1000) {
+          return res.status(400).json({ error: 'Book at least 10 minutes ahead' });
+        }
+        if (t > Date.now() + 30 * 24 * 3600 * 1000) {
+          return res.status(400).json({ error: 'You can book up to 30 days ahead' });
+        }
+        scheduledAt = new Date(t).toISOString().slice(0, 19).replace('T', ' ');
+      }
+
+      db.prepare('INSERT INTO rides (id, rider_id, pickup_place, dropoff_place, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, fare, currency, status, distance_km, duration_min, path_json, pickup_code, quoted_fare, meter_distance_km, meter_fare, scheduled_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .run(
           id,
           req.user.userId,
@@ -104,18 +118,19 @@ module.exports = (db, io, matchingEngine) => {
           dropoff.lng,
           est.fare,
           'FJD',
-          'requested',
+          scheduledAt ? 'scheduled' : 'requested',
           est.distance_km,
           est.duration_min,
           JSON.stringify(est.path),
           pickupCode,
           est.fare,
           0,
-          0
+          0,
+          scheduledAt
         );
 
       const ride = loadRide(db, id);
-      matchingEngine.matchRide(id, pickup.lat, pickup.lng);
+      if (!scheduledAt) matchingEngine.matchRide(id, pickup.lat, pickup.lng);
       res.json(ride);
     } catch (err) {
       res.status(500).json({ error: 'Failed to request ride' });
@@ -245,11 +260,56 @@ module.exports = (db, io, matchingEngine) => {
         return res.status(403).json({ error: 'Not authorized to cancel this ride' });
       }
 
-      const cancelled = matchingEngine.cancelRide(req.params.id);
+      const fee = cancellationFee(ride);
+      if (fee > 0 && !(req.body && req.body.confirm_fee)) {
+        return res.status(409).json({
+          error: `Cancelling now costs FJ$${fee.toFixed(2)}, paid to your driver for their time.`,
+          fee_required: true,
+          fee,
+        });
+      }
+
+      const cancelled = matchingEngine.cancelRide(req.params.id, { by: 'rider' });
       if (!cancelled) return res.status(400).json({ error: 'Ride cannot be cancelled' });
       res.json(cancelled);
     } catch (err) {
       res.status(500).json({ error: 'Failed to cancel ride' });
+    }
+  });
+
+  // Fresh road route from the driver's current position to the current target,
+  // so directions keep adapting as the driver turns off the planned path.
+  router.post('/:id/reroute', requireRole('driver'), async (req, res) => {
+    try {
+      const driver = db.prepare('SELECT * FROM drivers WHERE user_id=?').get(req.user.userId);
+      const ride = db.prepare('SELECT * FROM rides WHERE id=?').get(req.params.id);
+      if (!driver || !ride || ride.driver_id !== driver.id) {
+        return res.status(403).json({ error: 'Not your ride' });
+      }
+      if (!['accepted', 'arrived', 'in_progress'].includes(ride.status)) {
+        return res.status(400).json({ error: 'Ride is not active' });
+      }
+      const lat = Number(req.body && req.body.lat);
+      const lng = Number(req.body && req.body.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        return res.status(400).json({ error: 'lat and lng are required' });
+      }
+      const toDrop = ride.status === 'in_progress';
+      const tLat = toDrop ? ride.dropoff_lat : ride.pickup_lat;
+      const tLng = toDrop ? ride.dropoff_lng : ride.pickup_lng;
+      const routed = await getRoadRoute(lat, lng, tLat, tLng);
+      if (!routed) return res.json({ routed: false });
+      const payload = {
+        ride_id: ride.id,
+        target: toDrop ? 'dropoff' : 'pickup',
+        path: routed.path,
+        distance_km: routed.distance_km,
+        duration_min: routed.duration_min,
+      };
+      matchingEngine._emitToUser(ride.rider_id, 'ride_route_update', payload);
+      res.json({ routed: true, ...payload });
+    } catch (err) {
+      res.status(500).json({ error: 'Reroute failed' });
     }
   });
 

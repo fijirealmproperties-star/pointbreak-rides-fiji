@@ -88,6 +88,9 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'rides', 'final_fare', 'REAL');
   ensureColumn(db, 'rides', 'final_distance_km', 'REAL');
   ensureColumn(db, 'rides', 'final_duration_min', 'REAL');
+  ensureColumn(db, 'rides', 'scheduled_at', 'TEXT');
+  ensureColumn(db, 'rides', 'cancel_fee', 'REAL DEFAULT 0');
+  ensureColumn(db, 'rides', 'cancelled_by', 'TEXT');
   ensureColumn(db, 'users', 'suspended', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'users', 'email', 'TEXT');
   ensureColumn(db, 'users', 'email_verified', 'INTEGER DEFAULT 0');

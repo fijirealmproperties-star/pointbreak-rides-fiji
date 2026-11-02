@@ -13,7 +13,7 @@ import { colors, typography, fmtFare, fmtKm, fmtDuration } from "../theme";
 import { api, getToken, Ride, parsePath } from "../api";
 import { connectSocket, getSocket } from "../socket";
 import { isDriverApp } from "../appMode";
-import { bearing, haversine, interpolatePoint, watchCurrentLocation } from "../geo";
+import { bearing, haversine, watchCurrentLocation } from "../geo";
 import MapView, { MapMarker, MapPoint } from "../components/MapView";
 import TaxiMeter from "../components/TaxiMeter";
 
@@ -22,35 +22,29 @@ type Props = {
   onDone: () => void;
 };
 
-const SIM_SPEED_KMH = 42;
-const SIM_TICK_MS = 1000;
-const SIM_TARGET_SECONDS = 10;
+const REROUTE_MOVE_M = 60;
+const REROUTE_MIN_GAP_MS = 6000;
+const OFF_ROUTE_M = 35;
 
-function pathLengthMeters(path: MapPoint[]): number {
-  let total = 0;
+// Distance (m) from a point to the nearest segment of the route.
+function distanceToRouteM(path: MapPoint[], lat: number, lng: number): number {
+  if (path.length < 2) return Infinity;
+  const kx = 111320 * Math.cos((lat * Math.PI) / 180);
+  const ky = 110540;
+  let best = Infinity;
   for (let i = 0; i < path.length - 1; i++) {
-    total += haversine(path[i].lat, path[i].lng, path[i + 1].lat, path[i + 1].lng) * 1000;
+    const ax = (path[i].lng - lng) * kx;
+    const ay = (path[i].lat - lat) * ky;
+    const bx = (path[i + 1].lng - lng) * kx;
+    const by = (path[i + 1].lat - lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2));
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < best) best = d;
   }
-  return total;
-}
-
-function positionAlongPath(
-  path: MapPoint[],
-  distMeters: number
-): { lat: number; lng: number } {
-  let remaining = distMeters;
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i];
-    const b = path[i + 1];
-    const segKm = haversine(a.lat, a.lng, b.lat, b.lng);
-    if (segKm === 0) continue;
-    const segM = segKm * 1000;
-    if (remaining <= segM) {
-      return interpolatePoint(a.lat, a.lng, b.lat, b.lng, Math.max(0, remaining / segM));
-    }
-    remaining -= segM;
-  }
-  return path[path.length - 1];
+  return best;
 }
 
 export default function DriverActiveRide({ rideId, onDone }: Props) {
@@ -61,33 +55,21 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
   const [selfPos, setSelfPos] = useState<{ lat: number; lng: number } | null>(null);
   const [gpsAccuracy, setGpsAccuracy] = useState<number | null>(null);
   const [locationError, setLocationError] = useState("");
-  const [simming, setSimming] = useState(false);
-  const [simDone, setSimDone] = useState(false);
+  const [liveRoute, setLiveRoute] = useState<MapPoint[] | null>(null);
   const [code, setCode] = useState("");
   const [codeError, setCodeError] = useState("");
   const [busy, setBusy] = useState(false);
   const [revealing, setRevealing] = useState(false);
   const mountedRef = useRef(true);
-  const simRef = useRef<{
-    timer: ReturnType<typeof setInterval> | null;
-    traveled: number;
-    target: MapPoint;
-    speedMps: number;
-    startStatus: string;
-  }>({
-    timer: null,
-    traveled: 0,
-    target: { lat: 0, lng: 0 },
-    speedMps: (SIM_SPEED_KMH / 3600) * 1000,
-    startStatus: "accepted",
-  });
+  const rerouteRef = useRef<{ lat: number; lng: number; at: number; busy: boolean; status: string } | null>(null);
+  const liveRouteRef = useRef<MapPoint[] | null>(null);
+  liveRouteRef.current = liveRoute;
 
-  const stopSim = useCallback(() => {
-    if (simRef.current.timer) {
-      clearInterval(simRef.current.timer);
-      simRef.current.timer = null;
-    }
-    setSimming(false);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -99,7 +81,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         if (!ev || ev.ride_id !== rideId) return;
         if (ev.ride && ev.ride.status) setRide(ev.ride);
         else if (ev.status) setRide((r) => (r ? { ...r, status: ev.status } : r));
-        if (ev.status === "completed" || ev.status === "cancelled") stopSim();
       };
       const onLoc = (ev: any) => {
         if (!ev || ev.ride_id !== rideId) return;
@@ -133,10 +114,8 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         socket.off("ride_location_update", onLoc);
       };
     })();
-  }, [rideId, stopSim]);
+  }, [rideId]);
 
-  // cleanup simulation on unmount
-  useEffect(() => () => stopSim(), [stopSim]);
 
   const load = useCallback(async () => {
     try {
@@ -161,6 +140,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
   const dLat = ride?.dropoff_lat;
   const dLng = ride?.dropoff_lng;
   const route: MapPoint[] = useMemo(() => {
+    if (liveRoute && liveRoute.length >= 2 && status !== "arrived") return liveRoute;
     if (path.length >= 2) return path;
     if (pLat == null || pLng == null || dLat == null || dLng == null) return [];
     return [
@@ -169,7 +149,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       { lat: pLat + (dLat - pLat) * 0.6, lng: pLng + (dLng - pLng) * 0.6 },
       { lat: dLat, lng: dLng },
     ];
-  }, [path, pLat, pLng, dLat, dLng]);
+  }, [path, pLat, pLng, dLat, dLng, liveRoute, status]);
 
   const markers: MapMarker[] = useMemo(() => {
     if (pLat == null || pLng == null || dLat == null || dLng == null) return [];
@@ -188,7 +168,36 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
     : null;
 
   useEffect(() => {
-    if (!ride || simming || !["accepted", "arrived", "in_progress"].includes(status)) return;
+    if (!ride || !["accepted", "arrived", "in_progress"].includes(status)) return;
+
+    // Fetch a fresh road route from the current position; called when the driver
+    // has moved far enough (about one block) or strayed off the planned path.
+    const maybeReroute = (lat: number, lng: number) => {
+      const st = rerouteRef.current;
+      const now = Date.now();
+      if (st && st.busy) return;
+      if (status === "arrived") return;
+      const statusChanged = !st || st.status !== status;
+      const moved = st ? haversine(st.lat, st.lng, lat, lng) * 1000 : Infinity;
+      const live = liveRouteRef.current;
+      const off = live && live.length >= 2 ? distanceToRouteM(live, lat, lng) > OFF_ROUTE_M : false;
+      if (!statusChanged && !(moved >= REROUTE_MOVE_M || off)) return;
+      if (st && !statusChanged && now - st.at < REROUTE_MIN_GAP_MS) return;
+      rerouteRef.current = { lat, lng, at: now, busy: true, status };
+      api<{ routed: boolean; path?: MapPoint[] }>(`/rides/${rideId}/reroute`, {
+        method: "POST",
+        body: { lat, lng },
+      })
+        .then((r) => {
+          if (mountedRef.current && r && r.routed && Array.isArray(r.path) && r.path.length >= 2) {
+            setLiveRoute(r.path);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (rerouteRef.current) rerouteRef.current.busy = false;
+        });
+    };
 
     let lastSent: { lat: number; lng: number; at: number } | null = null;
     return watchCurrentLocation(
@@ -199,6 +208,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         setRide((current) =>
           current ? { ...current, driver_lat: position.lat, driver_lng: position.lng } : current
         );
+        if (position.accuracy == null || position.accuracy < 100) maybeReroute(position.lat, position.lng);
 
         const now = Date.now();
         const movedKm = lastSent
@@ -221,7 +231,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       },
       (e) => setLocationError(e.message),
     );
-  }, [rideId, !!ride, status, simming]);
+  }, [rideId, !!ride, status]);
 
   const selfAngle = useMemo(() => {
     if (!self || !target) return 0;
@@ -274,7 +284,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
     setRide((r) => (r ? { ...r, status: next } : r));
     setCode("");
     setBusy(false);
-    if (next === "completed") stopSim();
     return true;
   }
 
@@ -290,53 +299,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
     } finally {
       setRevealing(false);
     }
-  }
-
-  function startSimulation() {
-    if (!ride || !target) return;
-    if (simRef.current.timer) return;
-    const pts = route.length >= 2 ? route : [
-      { lat: ride.pickup_lat, lng: ride.pickup_lng },
-      { lat: ride.dropoff_lat, lng: ride.dropoff_lng },
-    ];
-    const base = self || { lat: pts[0].lat, lng: pts[0].lng };
-    simRef.current.traveled = 0;
-    simRef.current.target = target;
-    simRef.current.startStatus = status;
-    const simPath = [base, ...pts, target];
-    // Cover the whole path in a predictable ~10s so long approaches don't crawl.
-    const totalM = pathLengthMeters(simPath);
-    const naturalMps = (SIM_SPEED_KMH / 3600) * 1000;
-    simRef.current.speedMps = Math.max(naturalMps, totalM / SIM_TARGET_SECONDS);
-    setSimming(true);
-    setSimDone(false);
-    const socket = getSocket();
-    const tick = () => {
-      if (!mountedRef.current) {
-        stopSim();
-        return;
-      }
-      simRef.current.traveled += simRef.current.speedMps;
-      const pos = positionAlongPath(simPath, simRef.current.traveled);
-      setSelfPos(pos);
-      setRide((r) => (r ? { ...r, driver_lat: pos.lat, driver_lng: pos.lng } : r));
-      if (socket) socket.emit("driver_location", { ride_id: rideId, lat: pos.lat, lng: pos.lng });
-      try {
-        api("/drivers/location", { method: "POST", body: { lat: pos.lat, lng: pos.lng } });
-      } catch {
-        // backend may not persist location — live socket is enough
-      }
-      const distToTarget = haversine(pos.lat, pos.lng, target.lat, target.lng);
-      if (distToTarget < 0.05) {
-        stopSim();
-        setSimDone(true);
-        // Reached the pickup while heading there — advance so the code prompt appears.
-        if (simRef.current.startStatus === "accepted") {
-          transition("arrived");
-        }
-      }
-    };
-    simRef.current.timer = setInterval(tick, SIM_TICK_MS);
   }
 
   const pulse = useRef(new Animated.Value(1)).current;
@@ -383,9 +345,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       />
       <View style={styles.mapAttribution}>
         <Text style={styles.mapAttributionText}>
-          {simming
-            ? "Simulation mode · GPS paused"
-            : gpsAccuracy !== null
+          {gpsAccuracy !== null
             ? `Live GPS · ±${Math.round(gpsAccuracy)} m`
             : locationError || "Waiting for accurate GPS…"}
           {" · "}{fmtKm(ride.distance_km)} trip
@@ -429,7 +389,11 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         ) : status === "cancelled" ? (
           <View style={styles.completeBlock}>
             <Text style={[styles.completeTitle, { color: colors.coral }]}>Ride cancelled</Text>
-            <Text style={styles.completeSub}>The rider cancelled this trip.</Text>
+            <Text style={styles.completeSub}>
+              {ride.cancel_fee && ride.cancel_fee > 0
+                ? `The rider cancelled. You earn a ${fmtFare(ride.cancel_fee)} cancellation compensation.`
+                : "The rider cancelled this trip."}
+            </Text>
             <TouchableOpacity style={[styles.primaryBtn, { marginTop: 16 }]} onPress={onDone}>
               <Text style={styles.primaryBtnText}>Back to home</Text>
             </TouchableOpacity>
@@ -530,17 +494,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
                   <Text style={styles.stopBtnText}>Stop ride</Text>
                 </TouchableOpacity>
               ) : null}
-
-              <TouchableOpacity
-                style={[styles.simBtn, simming && styles.simBtnActive, simDone && styles.simBtnDone]}
-                onPress={startSimulation}
-                disabled={simming}
-              >
-                <Text style={styles.simBtnText}>
-                  {simming ? "Simulating… driving live" : simDone ? "Simulation reached target" : "Simulate Driving"}
-                </Text>
-                {simming ? <ActivityIndicator size="small" color="#fff" /> : null}
-              </TouchableOpacity>
             </View>
           </>
         )}

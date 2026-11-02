@@ -83,6 +83,9 @@ export interface Ride {
   pickup_at?: string | null;
   completed_at?: string | null;
   cancelled_at?: string | null;
+  scheduled_at?: string | null;
+  cancel_fee?: number | null;
+  cancelled_by?: string | null;
   rating?: number | null;
 }
 
@@ -257,6 +260,7 @@ export async function api<T = any>(
   if (!res.ok) {
     const err: any = new Error(data.error || `Request failed (${res.status})`);
     err.code = data.code;
+    err.fee = data.fee;
     throw err;
   }
   return data as T;

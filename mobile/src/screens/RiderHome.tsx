@@ -16,6 +16,7 @@ import { estimateLocally, estimateCacheKey, getCachedEstimate, setCachedEstimate
 import { connectSocket, getSocket } from "../socket";
 import MapView, { MapMarker, MapPoint } from "../components/MapView";
 import PlacePicker from "../components/PlacePicker";
+import ScheduleFields, { parseSchedule, toLocalDateStr, toLocalTimeStr } from "../components/ScheduleFields";
 import { loadPlaces, PLACES } from "../places";
 
 type Props = {
@@ -61,7 +62,21 @@ export default function RiderHome({ onOpenRide }: Props) {
   const [resolvingPin, setResolvingPin] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState("");
+  const [bookLater, setBookLater] = useState(false);
+  const [schedDate, setSchedDate] = useState("");
+  const [schedTime, setSchedTime] = useState("");
+  const [bookedMsg, setBookedMsg] = useState("");
   const cleanupRef = useRef<(() => void) | null>(null);
+
+  function toggleBookLater(on: boolean) {
+    setBookLater(on);
+    setBookedMsg("");
+    if (on && !schedDate) {
+      const d = new Date(Date.now() + 60 * 60 * 1000);
+      setSchedDate(toLocalDateStr(d));
+      setSchedTime(toLocalTimeStr(d));
+    }
+  }
 
   async function locateMe() {
     setLocating(true);
@@ -293,7 +308,7 @@ export default function RiderHome({ onOpenRide }: Props) {
   const markers: MapMarker[] = useMemo(() => {
     const out: MapMarker[] = driveMarkers.map((m) => ({ ...m, icon: "🚗" }));
     if (pickup) out.push({ id: "pickup", lat: pickup.lat, lng: pickup.lng, color: "#000000", label: "", icon: "🧍" });
-    if (dropoff) out.push({ id: "dropoff", lat: dropoff.lat, lng: dropoff.lng, color: "#00C853", label: "" });
+    if (dropoff) out.push({ id: "dropoff", lat: dropoff.lat, lng: dropoff.lng, color: "#00C853", label: "", icon: "📍" });
     return out;
   }, [driveMarkers, pickup, dropoff]);
 
@@ -360,6 +375,13 @@ export default function RiderHome({ onOpenRide }: Props) {
   async function submitRequest() {
     if (!pickup || !dropoff || reqState !== "idle") return;
     setError("");
+    let scheduledIso: string | undefined;
+    if (bookLater) {
+      const when = parseSchedule(schedDate, schedTime);
+      if (!when) return setError("Choose a valid date and time.");
+      if (when.getTime() < Date.now() + 10 * 60 * 1000) return setError("Book at least 10 minutes ahead.");
+      scheduledIso = when.toISOString();
+    }
     setReqState("requesting");
     try {
       const token = await getToken();
@@ -376,8 +398,18 @@ export default function RiderHome({ onOpenRide }: Props) {
           dropoff_lat: dropoff.lat,
           dropoff_lng: dropoff.lng,
           dropoff_name: dropoff.name,
+          scheduled_at: scheduledIso,
         },
       });
+      if (scheduledIso) {
+        setReqState("idle");
+        setDropoff(null);
+        setBookLater(false);
+        setBookedMsg(
+          `Booked for ${new Date(scheduledIso).toLocaleString()}. We'll find your driver shortly before pickup. Manage it in Trips.`
+        );
+        return;
+      }
       setRideId(ride.id);
       setReqState("finding");
       listenForRide(ride.id);
@@ -423,6 +455,24 @@ export default function RiderHome({ onOpenRide }: Props) {
         onMapClick={pinMode ? handleMapClick : undefined}
         style={StyleSheet.absoluteFill}
       />
+
+      {pinMode || pickup || dropoff ? (
+        <View style={[styles.legend, { top: insets.top + (pinMode ? 70 : 12) }]}>
+          <Text style={styles.legendTitle}>Map legend</Text>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: "#000" }]} />
+            <Text style={styles.legendText}>🧍 Pickup{pinMode === "pickup" ? " (placing)" : ""}</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: "#00C853" }]} />
+            <Text style={styles.legendText}>📍 Drop-off{pinMode === "dropoff" ? " (placing)" : ""}</Text>
+          </View>
+          <View style={styles.legendRow}>
+            <View style={[styles.legendDot, { backgroundColor: colors.sky }]} />
+            <Text style={styles.legendText}>🚗 Drivers nearby</Text>
+          </View>
+        </View>
+      ) : null}
 
       {pinMode ? (
         <View style={[styles.pinBanner, { top: insets.top + 8 }]}>
@@ -494,6 +544,7 @@ export default function RiderHome({ onOpenRide }: Props) {
             </View>
             {!showRideOptions ? (
               <>
+                {bookedMsg ? <Text style={styles.bookedMsg}>✅ {bookedMsg}</Text> : null}
                 <TouchableOpacity style={styles.whereBar} activeOpacity={0.7} onPress={() => setPickerOpen("dropoff")}>
                   <Text style={styles.whereBarIcon}>🔍</Text>
                   <Text style={styles.whereBarText}>Where to?</Text>
@@ -622,6 +673,36 @@ export default function RiderHome({ onOpenRide }: Props) {
                   </View>
                 ) : null}
 
+                <View style={styles.whenRow}>
+                  <TouchableOpacity
+                    style={[styles.whenChip, !bookLater && styles.whenChipOn]}
+                    onPress={() => toggleBookLater(false)}
+                  >
+                    <Text style={[styles.whenChipText, !bookLater && styles.whenChipTextOn]}>Ride now</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.whenChip, bookLater && styles.whenChipOn]}
+                    onPress={() => toggleBookLater(true)}
+                  >
+                    <Text style={[styles.whenChipText, bookLater && styles.whenChipTextOn]}>Book in advance</Text>
+                  </TouchableOpacity>
+                </View>
+                {bookLater ? (
+                  <>
+                    <ScheduleFields
+                      date={schedDate}
+                      time={schedTime}
+                      onChange={(d, t) => {
+                        setSchedDate(d);
+                        setSchedTime(t);
+                      }}
+                    />
+                    <Text style={styles.roadBadge}>
+                      Pickup: {pickup?.name || "set pickup"} · tap 📌 Pin pickup to choose the exact spot.
+                    </Text>
+                  </>
+                ) : null}
+
                 {error ? <Text style={styles.error}>{error}</Text> : null}
 
                 <TouchableOpacity
@@ -629,7 +710,9 @@ export default function RiderHome({ onOpenRide }: Props) {
                   disabled={!estimate}
                   onPress={submitRequest}
                 >
-                  <Text style={styles.requestBtnText}>Request Pointbreak Go</Text>
+                  <Text style={styles.requestBtnText}>
+                    {bookLater ? "Book Pointbreak Go" : "Request Pointbreak Go"}
+                  </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity style={styles.changeDestBtn} onPress={() => setDropoff(null)}>
@@ -704,6 +787,29 @@ const styles = StyleSheet.create({
   whereBarIcon: {
     fontSize: 15,
   },
+  bookedMsg: { color: "#0A7A3B", backgroundColor: "#E6F6EC", padding: 10, borderRadius: 10, marginBottom: 10, fontSize: 14 },
+  whenRow: { flexDirection: "row", gap: 8, marginBottom: 10 },
+  whenChip: { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: "#F3F3F3", alignItems: "center" },
+  whenChipOn: { backgroundColor: "#000" },
+  whenChipText: { color: "#000", fontWeight: "700", fontSize: 14 },
+  whenChipTextOn: { color: "#fff" },
+  legend: {
+    position: "absolute",
+    right: 10,
+    backgroundColor: "rgba(255,255,255,0.95)",
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 6,
+  },
+  legendTitle: { fontSize: 11, fontWeight: "800", color: "#000", marginBottom: 2 },
+  legendRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  legendDot: { width: 12, height: 12, borderRadius: 6 },
+  legendText: { fontSize: 12, color: "#111" },
   whereBarText: {
     fontSize: 16,
     fontWeight: "600",

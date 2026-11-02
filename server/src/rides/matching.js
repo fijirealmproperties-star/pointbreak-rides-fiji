@@ -6,7 +6,26 @@ const MATCH_TIMEOUT_MS = 30000;
 const MATCH_RETRY_MS = 8000;
 const MAX_MATCH_ATTEMPTS = 3;
 
-const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
+// A driver may wait for a no-show rider up to 13 hours before the trip lapses.
+const MAX_WAIT_MINUTES = 13 * 60;
+const DISPATCH_LEAD_MINUTES = 15;
+const FREE_CANCEL_SECONDS = 120;
+const CANCEL_FEE_ACCEPTED = 3;
+const CANCEL_FEE_ARRIVED = 5;
+
+// Fee a rider owes the driver for cancelling a ride in its current state.
+function cancellationFee(ride, now = Date.now()) {
+  if (!ride) return 0;
+  if (ride.status === 'arrived') return CANCEL_FEE_ARRIVED;
+  if (ride.status === 'accepted') {
+    const t = ride.accepted_at ? Date.parse(String(ride.accepted_at).replace(' ', 'T') + 'Z') : NaN;
+    if (Number.isFinite(t) && now - t <= FREE_CANCEL_SECONDS * 1000) return 0;
+    return CANCEL_FEE_ACCEPTED;
+  }
+  return 0;
+}
+
+const ACTIVE_STATUSES = ['scheduled', 'requested', 'accepted', 'arrived', 'in_progress'];
 // Statuses where the driver is genuinely committed to a trip. 'requested' is
 // only a pending offer, so it must never block a driver from going online.
 const COMMITTED_STATUSES = ['accepted', 'arrived', 'in_progress'];
@@ -153,24 +172,45 @@ class MatchingEngine {
   // A committed trip that nobody has touched in a while is abandoned (the
   // driver app closed or the server restarted mid-trip). Cancel it so the
   // driver isn't locked out of new rides forever.
-  sweepStaleTrips(maxIdleMinutes = 5) {
-    const rows = this.db.prepare(
-      `SELECT id FROM rides
-       WHERE status IN ('accepted','arrived','in_progress')
-         AND COALESCE(pickup_at, arrived_at, accepted_at, requested_at)
-             < datetime('now', ?)`
-    ).all(`-${maxIdleMinutes} minutes`);
+  sweepStaleTrips() {
+    const limits = { accepted: 120, arrived: MAX_WAIT_MINUTES, in_progress: 360 };
     let cleared = 0;
-    for (const row of rows) {
-      if (this.cancelRide(row.id)) cleared += 1;
+    for (const [status, minutes] of Object.entries(limits)) {
+      const rows = this.db.prepare(
+        `SELECT id FROM rides
+         WHERE status=?
+           AND COALESCE(pickup_at, arrived_at, accepted_at, requested_at)
+               < datetime('now', ?)`
+      ).all(status, `-${minutes} minutes`);
+      for (const row of rows) {
+        if (this.cancelRide(row.id, { by: 'system' })) cleared += 1;
+      }
     }
     return cleared;
+  }
+
+  // Booked-ahead rides go out to drivers shortly before pickup time.
+  dispatchScheduled() {
+    const rows = this.db.prepare(
+      "SELECT * FROM rides WHERE status='scheduled' AND scheduled_at <= datetime('now', ?)"
+    ).all(`+${DISPATCH_LEAD_MINUTES} minutes`);
+    for (const ride of rows) {
+      this.db.prepare("UPDATE rides SET status='requested', requested_at=datetime('now') WHERE id=?").run(ride.id);
+      sendPush(this.db, ride.rider_id, {
+        title: '🚗 Finding your driver',
+        body: `Your booked ride to ${ride.dropoff_place} is being dispatched.`,
+        tag: `ride-${ride.id}`,
+      }).catch(() => {});
+      this.matchRide(ride.id, ride.pickup_lat, ride.pickup_lng);
+    }
+    return rows.length;
   }
 
   startSweeper(intervalMs = 15000) {
     if (this.sweepTimer) return;
     this.sweepTimer = setInterval(() => {
       try {
+        this.dispatchScheduled();
         this.sweepStaleRequests();
         this.sweepStaleTrips();
       } catch (e) {
@@ -370,7 +410,7 @@ class MatchingEngine {
     }
   }
 
-  cancelRide(rideId) {
+  cancelRide(rideId, opts = {}) {
     const ride = this.db.prepare('SELECT * FROM rides WHERE id=?').get(rideId);
     if (!ride) return null;
     if (!ACTIVE_STATUSES.includes(ride.status)) return null;
@@ -381,8 +421,11 @@ class MatchingEngine {
       this.pendingMatches.delete(rideId);
     }
 
-    this.db.prepare("UPDATE rides SET status='cancelled', driver_id=NULL, cancelled_at=datetime('now') WHERE id=?")
-      .run(rideId);
+    const fee = opts.by === 'rider' ? cancellationFee(ride) : 0;
+    // Keep the driver on the record so the compensation can be shown to them.
+    const keepDriver = fee > 0 ? ride.driver_id : null;
+    this.db.prepare("UPDATE rides SET status='cancelled', driver_id=?, cancelled_at=datetime('now'), cancel_fee=?, cancelled_by=? WHERE id=?")
+      .run(keepDriver, fee, opts.by || null, rideId);
     const fresh = loadRide(this.db, rideId);
 
     const cancelledEnvelope = rideEnvelope(fresh);
@@ -478,3 +521,4 @@ class MatchingEngine {
 }
 
 module.exports = MatchingEngine;
+module.exports.cancellationFee = cancellationFee;

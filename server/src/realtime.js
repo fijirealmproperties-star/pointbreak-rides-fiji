@@ -226,7 +226,10 @@ function setupSocket(io, matchingEngine, db) {
 
     socket.on('rider_cancel', (data) => {
       if (socket.role !== 'rider') return;
-      matchingEngine.cancelRide(idOf(data));
+      // Only free, pre-acceptance cancels are allowed here; fees go through the REST API.
+      const r = matchingEngine.db.prepare('SELECT rider_id, status FROM rides WHERE id=?').get(idOf(data));
+      if (!r || r.rider_id !== socket.userId || !['requested', 'scheduled'].includes(r.status)) return;
+      matchingEngine.cancelRide(idOf(data), { by: 'rider' });
     });
 
     socket.on('disconnect', () => {

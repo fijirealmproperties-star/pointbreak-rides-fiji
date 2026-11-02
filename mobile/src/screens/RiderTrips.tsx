@@ -11,6 +11,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, fmtFare, fmtDate, fmtTime, statusLabel, statusColor } from "../theme";
 import { api, Ride } from "../api";
+import { confirmAsync } from "../confirm";
 
 export default function RiderTrips({ onOpenRide }: { onOpenRide: (rideId: string) => void }) {
   const insets = useSafeAreaInsets();
@@ -38,8 +39,21 @@ export default function RiderTrips({ onOpenRide }: { onOpenRide: (rideId: string
     load();
   }, [load]);
 
+  async function cancelScheduled(item: Ride) {
+    const ok = await confirmAsync("Cancel booking", "Cancel this booked ride? There is no charge.", "Cancel booking", "Keep");
+    if (!ok) return;
+    try {
+      await api(`/rides/${item.id}/cancel`, { method: "POST" });
+      load(true);
+    } catch (e: any) {
+      setError(e.message || "Could not cancel.");
+    }
+  }
+
   function renderTrip({ item }: { item: Ride }) {
     const sc = statusColor(item.status);
+    const scheduled = item.status === "scheduled" && item.scheduled_at;
+    const when = scheduled ? new Date(String(item.scheduled_at).replace(" ", "T") + "Z") : null;
     return (
       <TouchableOpacity
         style={styles.card}
@@ -52,7 +66,9 @@ export default function RiderTrips({ onOpenRide }: { onOpenRide: (rideId: string
       >
         <View style={styles.cardHead}>
           <Text style={styles.date}>
-            {fmtDate(item.requested_at)} · {fmtTime(item.requested_at)}
+            {when
+              ? `📅 ${when.toLocaleString()}`
+              : `${fmtDate(item.requested_at)} · ${fmtTime(item.requested_at)}`}
           </Text>
           <View style={[styles.badge, { borderColor: sc }]}>
             <Text style={[styles.badgeText, { color: sc }]}>{statusLabel(item.status)}</Text>
@@ -73,6 +89,14 @@ export default function RiderTrips({ onOpenRide }: { onOpenRide: (rideId: string
           <Text style={styles.footLeft}>{item.driver_name ? `Driver: ${item.driver_name}` : `${item.distance_km?.toFixed(1) ?? "—"} km · ${Math.round(item.duration_min ?? 0)} min`}</Text>
           <Text style={styles.fare}>{fmtFare(item.fare)}</Text>
         </View>
+        {item.status === "cancelled" && item.cancel_fee && item.cancel_fee > 0 ? (
+          <Text style={styles.feeNote}>Cancellation fee: {fmtFare(item.cancel_fee)}</Text>
+        ) : null}
+        {scheduled ? (
+          <TouchableOpacity style={styles.cancelBooking} onPress={() => cancelScheduled(item)}>
+            <Text style={styles.cancelBookingText}>Cancel booking</Text>
+          </TouchableOpacity>
+        ) : null}
       </TouchableOpacity>
     );
   }
@@ -153,6 +177,9 @@ const styles = StyleSheet.create({
   },
   footLeft: { color: colors.textMuted, fontSize: typography.small, flex: 1 },
   fare: { color: colors.ocean, fontSize: typography.subtitle, fontWeight: "800" },
+  feeNote: { color: colors.coral, fontSize: typography.small, marginTop: 8 },
+  cancelBooking: { marginTop: 10, borderWidth: 1, borderColor: colors.coral, borderRadius: 10, paddingVertical: 8, alignItems: "center" },
+  cancelBookingText: { color: colors.coral, fontWeight: "700" },
   empty: { alignItems: "center", paddingVertical: 60 },
   emptyIcon: { fontSize: 44 },
   emptyTitle: { color: colors.text, fontSize: typography.heading, fontWeight: "700", marginTop: 12 },

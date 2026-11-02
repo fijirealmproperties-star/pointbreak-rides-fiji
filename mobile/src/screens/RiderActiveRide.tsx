@@ -14,6 +14,7 @@ import { connectSocket, getSocket } from "../socket";
 import MapView, { MapMarker } from "../components/MapView";
 import TaxiMeter from "../components/TaxiMeter";
 import { bearing, haversine } from "../geo";
+import { confirmAsync } from "../confirm";
 
 type Props = {
   rideId: string;
@@ -127,10 +128,16 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
         });
       };
       socket.on("ride_status", onStatus);
+      const onRoute = (ev: any) => {
+        if (!ev || ev.ride_id !== rideId || !Array.isArray(ev.path) || ev.path.length < 2) return;
+        setRide((r) => (r ? { ...r, path_json: JSON.stringify(ev.path) } : r));
+      };
+      socket.on("ride_route_update", onRoute);
       socket.on("ride_location_update", onLoc);
       socket.emit("ride_subscribe", { ride_id: rideId });
       return () => {
         socket.off("ride_status", onStatus);
+        socket.off("ride_route_update", onRoute);
         socket.off("ride_location_update", onLoc);
       };
     })();
@@ -195,9 +202,20 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
   async function cancelRide() {
     setCancelBusy(true);
     try {
-      await api(`/rides/${rideId}/cancel`, { method: "POST" });
-      const s = getSocket();
-      if (s) s.emit("rider_cancel", { ride_id: rideId });
+      try {
+        await api(`/rides/${rideId}/cancel`, { method: "POST" });
+      } catch (e: any) {
+        if (!e || e.fee == null) throw e;
+        const ok = await confirmAsync(
+          "Cancellation fee",
+          `${e.message}\n\nCancel the ride and pay FJ$${Number(e.fee).toFixed(2)}?`,
+          "Cancel & pay",
+          "Keep ride"
+        );
+        if (!ok) return;
+        await api(`/rides/${rideId}/cancel`, { method: "POST", body: { confirm_fee: true } });
+      }
+      await refresh();
       setRide((r) => (r ? { ...r, status: "cancelled" } : r));
     } catch (e: any) {
       setError(e.message || "Could not cancel.");
@@ -352,14 +370,18 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
         ) : (
           <View style={styles.statusBlock}>
             <Text style={[styles.statusTitle, { color: colors.coral }]}>Ride cancelled</Text>
-            <Text style={styles.statusSub}>Your ride request was cancelled. Hang loose and try again.</Text>
+            <Text style={styles.statusSub}>
+              {ride.cancel_fee && ride.cancel_fee > 0
+                ? `A cancellation fee of ${fmtFare(ride.cancel_fee)} applies to compensate your driver.`
+                : "Your ride request was cancelled. Hang loose and try again."}
+            </Text>
             <TouchableOpacity style={[styles.primaryBtn, { marginTop: 14 }]} onPress={onClose}>
               <Text style={styles.primaryBtnText}>Back to home</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {(status === "requested" || status === "accepted") ? (
+        {(status === "requested" || status === "accepted" || status === "arrived") ? (
           <TouchableOpacity
             style={styles.cancelBtn}
             onPress={cancelRide}

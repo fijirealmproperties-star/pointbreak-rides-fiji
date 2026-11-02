@@ -61,6 +61,7 @@ export function fmtTime(iso?: string | null): string {
 export function statusLabel(status: string): string {
   switch (status) {
     case "requested": return "Requested";
+    case "scheduled": return "Booked";
     case "searching": return "Searching";
     case "accepted": return "Driver found";
     case "arrived": return "Driver arrived";
@@ -74,6 +75,7 @@ export function statusLabel(status: string): string {
 export function statusColor(status: string): string {
   switch (status) {
     case "requested": return colors.sky;
+    case "scheduled": return colors.amber;
     case "searching": return colors.sky;
     case "accepted": return colors.amber;
     case "arrived": return colors.green;
