@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { View, StyleSheet, ViewStyle } from "react-native";
+import { View, StyleSheet, ViewStyle, TouchableOpacity, Text } from "react-native";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -310,10 +310,59 @@ export default function MapView({
     if (bundleRef.current) applyState(bundleRef.current, payload);
   }, [payload, bundleRef.current]);
 
-  return <View nativeID={domId} style={[styles.container, style]} />;
+  const [locating, setLocating] = useState(false);
+  const meRef = useRef<L.Layer | null>(null);
+
+  function locateMe() {
+    const rt = bundleRef.current;
+    if (!rt || !navigator.geolocation || locating) return;
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setLocating(false);
+        const { latitude, longitude, accuracy } = pos.coords;
+        rt.userMoved = true;
+        rt.move(() => rt.map.setView([latitude, longitude], Math.max(rt.map.getZoom(), 16), { animate: true }));
+        if (meRef.current) rt.map.removeLayer(meRef.current);
+        meRef.current = L.layerGroup([
+          L.circle([latitude, longitude], { radius: Math.min(accuracy, 200), color: "#1E88E5", weight: 1, fillOpacity: 0.12 }),
+          L.circleMarker([latitude, longitude], { radius: 7, color: "#fff", weight: 2, fillColor: "#1E88E5", fillOpacity: 1 }),
+        ]).addTo(rt.map);
+      },
+      () => setLocating(false),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  return (
+    <View style={[styles.container, style]}>
+      <View nativeID={domId} style={StyleSheet.absoluteFill} />
+      <TouchableOpacity style={styles.locateBtn} onPress={locateMe} accessibilityLabel="Centre on my location">
+        <Text style={styles.locateIcon}>{locating ? "…" : "➤"}</Text>
+      </TouchableOpacity>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
+  locateBtn: {
+    position: "absolute",
+    right: 12,
+    top: "38%",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 1000,
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+  },
+  locateIcon: { fontSize: 22, color: "#1E88E5", fontWeight: "800" },
   container: {
     backgroundColor: colors.deep,
     width: "100%",
