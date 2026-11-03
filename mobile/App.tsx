@@ -30,6 +30,7 @@ import DriverActiveRide from "./src/screens/DriverActiveRide";
 import DriverTrips from "./src/screens/DriverTrips";
 import DriverMeter from "./src/screens/DriverMeter";
 import NoticeBell from "./src/components/NoticeBell";
+import ShareAppCard from "./src/components/ShareAppCard";
 
 type TabKey = "home" | "trips" | "meter" | "profile";
 
@@ -120,6 +121,8 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
           </View>
         </View>
       ) : null}
+
+      <ShareAppCard />
 
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
