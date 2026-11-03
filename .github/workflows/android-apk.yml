@@ -54,6 +54,12 @@ jobs:
           }
           EOF
           npx cap add android
+          mkdir -p assets
+          cp public/icons/icon-512.png assets/icon-only.png
+          cp public/icons/icon-maskable-512.png assets/icon-foreground.png
+          convert -size 1024x1024 xc:'#02266E' assets/icon-background.png
+          npm install --no-save @capacitor/assets@3
+          npx capacitor-assets generate --android --iconBackgroundColor '#02266E'
           npx cap sync android
           M=android/app/src/main/AndroidManifest.xml
           sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.POST_NOTIFICATIONS" /><application#' "$M"
