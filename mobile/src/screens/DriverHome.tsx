@@ -255,7 +255,8 @@ export default function DriverHome({ onOpenRide }: Props) {
 
     setStartingOnline(true);
     primeAudio();
-    const pushResult = await enablePush();
+    // Push is best-effort; a failure here must not show an error under the map.
+    await enablePush().catch(() => {});
     try {
       // Confirm a fresh, accurate fix before making the
       // driver available for matching.
@@ -270,7 +271,6 @@ export default function DriverHome({ onOpenRide }: Props) {
       if (socket) socket.emit("driver_status", { online: true });
       wentOnlineRef.current = true;
       setOnline(true);
-      if (!pushResult.ok && pushResult.reason) setError(pushResult.reason);
     } catch (e: any) {
       setLocationError(e.message || "Allow location access to go online.");
     } finally {
