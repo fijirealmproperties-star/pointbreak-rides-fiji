@@ -987,7 +987,7 @@ async function assignDriver(driverId) {
 
 // ---- Tabs ----
 function showTab(name) {
-  if (!['live','bookings','messaging','users'].includes(name)) name = 'live';
+  if (!['live','bookings','messaging','users','ai'].includes(name)) name = 'live';
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('tab-hidden', el.dataset.tab !== name));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.go === name));
   try { localStorage.setItem('pb-admin-tab', name); } catch (e) {}
@@ -995,3 +995,42 @@ function showTab(name) {
 }
 showTab((location.hash || '').slice(1) || (function () { try { return localStorage.getItem('pb-admin-tab'); } catch (e) { return null; } })() || 'live');
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h) showTab(h); });
+
+// ---- AI assistant ----
+const aiHistory = [];
+function aiBubble(text, who) {
+  const log = document.getElementById('ai-log');
+  const d = document.createElement('div');
+  d.style.cssText = 'padding:10px 12px;border-radius:10px;white-space:pre-wrap;max-width:90%;' +
+    (who === 'user' ? 'align-self:flex-end;background:#33AADD;color:#04121f' : 'align-self:flex-start;background:#1A2B3D;border:1px solid #2A3B4D');
+  d.textContent = text;
+  log.appendChild(d);
+  log.scrollTop = log.scrollHeight;
+  return d;
+}
+
+async function aiAsk(preset) {
+  const input = document.getElementById('ai-input');
+  const q = (preset || input.value || '').trim();
+  if (!q) return;
+  if (!adminToken) { aiBubble('Sign in with the admin account first.', 'ai'); return; }
+  input.value = '';
+  aiBubble(q, 'user');
+  const wait = aiBubble('Thinking…', 'ai');
+  const btn = document.getElementById('ai-send');
+  btn.disabled = true;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/ai`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q, history: aiHistory }),
+    });
+    const data = await res.json().catch(() => ({}));
+    const answer = res.ok ? data.answer : (data.error || 'Something went wrong');
+    wait.textContent = answer;
+    if (res.ok) { aiHistory.push({ role: 'user', content: q }, { role: 'assistant', content: answer }); }
+  } catch (e) {
+    wait.textContent = 'Could not reach the server.';
+  }
+  btn.disabled = false;
+}

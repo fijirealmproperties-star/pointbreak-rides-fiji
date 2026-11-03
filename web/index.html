@@ -25,6 +25,7 @@
     <button class="tab-btn" data-go="bookings" onclick="showTab('bookings')">📅 Bookings &amp; Meter</button>
     <button class="tab-btn" data-go="messaging" onclick="showTab('messaging')">💬 Messaging &amp; Notifications</button>
     <button class="tab-btn" data-go="users" onclick="showTab('users')">👥 Users</button>
+    <button class="tab-btn" data-go="ai" onclick="showTab('ai')">🤖 AI Assistant</button>
   </nav>
 
   <section class="register-section" style="padding-top:10px;padding-bottom:10px">
@@ -180,6 +181,23 @@
     <div id="acct-detail" style="margin-top:12px"></div>
   </section>
 
+  <section class="register-section" id="ai" data-tab="ai">
+    <div class="section-header">
+      <h2>🤖 AI Assistant</h2>
+      <span class="register-status" id="ai-status"></span>
+    </div>
+    <div class="admin-hint" style="margin-bottom:8px">Ask about riders, drivers, rides, revenue and meter trips. It only reads data — it can't change anything.</div>
+    <div class="register-row" style="margin-bottom:8px">
+      <button class="reg-btn reg-btn-ghost" onclick="aiAsk('How many rides and how much revenue today and this week?')">Today &amp; week</button>
+      <button class="reg-btn reg-btn-ghost" onclick="aiAsk('Which drivers are busiest and who is online now?')">Busiest drivers</button>
+      <button class="reg-btn reg-btn-ghost" onclick="aiAsk('Summarise cancellations and any problems I should look at.')">Problems</button>
+    </div>
+    <div id="ai-log" style="max-height:420px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px"></div>
+    <div class="register-row">
+      <input id="ai-input" class="reg-input" style="flex:1" maxlength="600" placeholder="Ask anything about your business…" onkeydown="if(event.key==='Enter')aiAsk()" />
+      <button id="ai-send" class="reg-btn" onclick="aiAsk()">Ask</button>
+    </div>
+  </section>
   <section class="map-section" data-tab="live">
     <div class="section-header">
       <h2>Live Map</h2>

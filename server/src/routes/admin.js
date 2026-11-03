@@ -11,6 +11,66 @@ module.exports = (db, matchingEngine) => {
 
   router.use(requireAuth, requireRole('admin'));
 
+  // Read-only AI assistant: answers admin questions from a live data snapshot.
+  router.post('/ai', async (req, res) => {
+    const key = process.env.OPENAI_API_KEY;
+    if (!key) {
+      return res.status(503).json({ error: 'AI is not set up yet. Add OPENAI_API_KEY in Railway → Variables, then redeploy.' });
+    }
+    const question = String((req.body && req.body.question) || '').trim().slice(0, 600);
+    if (!question) return res.status(400).json({ error: 'Type a question' });
+    const history = Array.isArray(req.body && req.body.history) ? req.body.history.slice(-6) : [];
+
+    const one = (sql, ...a) => db.prepare(sql).get(...a);
+    const all = (sql, ...a) => db.prepare(sql).all(...a);
+    const snapshot = {
+      now_utc: new Date().toISOString(),
+      totals: {
+        riders: one("SELECT COUNT(*) n FROM users WHERE role='rider'").n,
+        drivers: one("SELECT COUNT(*) n FROM drivers").n,
+        suspended_users: one("SELECT COUNT(*) n FROM users WHERE suspended=1").n,
+        online_drivers: one("SELECT COUNT(*) n FROM drivers WHERE status='online'").n,
+        rides_total: one('SELECT COUNT(*) n FROM rides').n,
+        rides_completed: one("SELECT COUNT(*) n FROM rides WHERE status='completed'").n,
+        rides_cancelled: one("SELECT COUNT(*) n FROM rides WHERE status='cancelled'").n,
+        revenue_fjd: one("SELECT ROUND(COALESCE(SUM(COALESCE(final_fare,fare)),0),2) n FROM rides WHERE status='completed'").n,
+        roadside_trips: one('SELECT COUNT(*) n FROM roadside_trips').n,
+        roadside_revenue_fjd: one('SELECT ROUND(COALESCE(SUM(total_fare),0),2) n FROM roadside_trips').n,
+      },
+      rides_by_status: all('SELECT status, COUNT(*) n FROM rides GROUP BY status'),
+      rides_last_14_days: all("SELECT date(requested_at) day, COUNT(*) rides, ROUND(SUM(CASE WHEN status='completed' THEN COALESCE(final_fare,fare) ELSE 0 END),2) revenue FROM rides WHERE requested_at >= datetime('now','-14 day') GROUP BY day ORDER BY day"),
+      top_drivers: all("SELECT full_name, vehicle_type, license_plate, status, rating, trips FROM drivers ORDER BY trips DESC LIMIT 10"),
+      recent_rides: all("SELECT r.status, r.pickup_place, r.dropoff_place, r.fare, r.final_fare, r.distance_km, r.requested_at, r.scheduled_at, u.name rider, d.full_name driver FROM rides r LEFT JOIN users u ON u.id=r.rider_id LEFT JOIN drivers d ON d.id=r.driver_id ORDER BY r.requested_at DESC LIMIT 25"),
+      recent_roadside_trips: all("SELECT t.tariff_type, t.total_fare, t.trip_distance_km, t.trip_duration_seconds, t.created_at, COALESCE(d.full_name,u.name) driver FROM roadside_trips t LEFT JOIN drivers d ON d.id=t.driver_id LEFT JOIN users u ON u.id=t.driver_id ORDER BY t.id DESC LIMIT 15"),
+    };
+
+    const messages = [
+      {
+        role: 'system',
+        content:
+          'You are the admin assistant for Pointbreak Fiji Rides, a Fiji taxi and ride app. Answer the admin\'s questions using only the JSON data snapshot below. Be short and clear, use FJ$ for money, and say so if the snapshot cannot answer. You are read-only: you cannot change data or send messages; if asked, explain which admin tab to use. Times are UTC; Fiji is UTC+12.\nDATA:\n' +
+          JSON.stringify(snapshot),
+      },
+      ...history
+        .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+        .map((m) => ({ role: m.role, content: m.content.slice(0, 1500) })),
+      { role: 'user', content: question },
+    ];
+
+    try {
+      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        body: JSON.stringify({ model: process.env.OPENAI_MODEL || 'gpt-4o-mini', messages, temperature: 0.2, max_tokens: 500 }),
+        signal: AbortSignal.timeout(30000),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) return res.status(502).json({ error: (data.error && data.error.message) || 'The AI service returned an error' });
+      res.json({ answer: (data.choices && data.choices[0] && data.choices[0].message.content) || 'No answer.' });
+    } catch (e) {
+      res.status(502).json({ error: 'Could not reach the AI service. Try again.' });
+    }
+  });
   // Broadcast a notice to riders, drivers or everyone (in-app bell + push).
   router.post('/notices', async (req, res) => {
     const title = String((req.body && req.body.title) || '').trim().slice(0, 80);
