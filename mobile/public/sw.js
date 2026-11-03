@@ -27,9 +27,9 @@ self.addEventListener("activate", (event) => {
       const keys = await caches.keys();
       // Apps installed before the in-app update popup existed cannot ask the user,
       // so they are refreshed once here. Newer apps show their own Update popup.
-      const hadPrompt = keys.includes("pb-flag-update-prompt");
-      await Promise.all(keys.filter((k) => k !== VERSION && k !== "pb-flag-update-prompt").map((k) => caches.delete(k)));
-      await caches.open("pb-flag-update-prompt");
+      const hadPrompt = keys.includes("pb-flag-popup-v16");
+      await Promise.all(keys.filter((k) => k !== VERSION && k !== "pb-flag-popup-v16").map((k) => caches.delete(k)));
+      await caches.open("pb-flag-popup-v16");
       await self.clients.claim();
       if (!hadPrompt) {
         const wins = await self.clients.matchAll({ type: "window" });
