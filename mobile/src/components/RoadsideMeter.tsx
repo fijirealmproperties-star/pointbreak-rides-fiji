@@ -1,8 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as Location from "expo-location";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
 import { colors, typography } from "../theme";
+
+const TRIP_KEY = "pb-active-trip";
 
 // Fiji FCCC regulated rates.
 const FIJI_TARIFFS = {
@@ -78,6 +81,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const secRef = useRef(0);
   const tripId = useRef<number | null>(null);
   const wakeLock = useRef<any>(null);
+  const regionRef = useRef<Region>("VITI_LEVU");
+  const periodRef = useRef<Period>(autoPeriod());
   const lastTick = useRef(0);
 
   useEffect(
@@ -127,6 +132,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       Alert.alert("Permission needed", "Location access is required to run the meter.");
       return;
     }
+    regionRef.current = region;
+    periodRef.current = period;
     const rates = getRate(region, period);
     const tariffKey = isAirport(region) ? region : `${region}_${period}`;
     try {
@@ -147,6 +154,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setSeconds(0);
     setIsRunning(true);
 
+    await runLoop(rates);
+  }
+
+  async function runLoop(rates: Rate) {
     holdWake();
     lastTick.current = Date.now();
     // Use real elapsed time so throttled timers don't under-count the trip.
@@ -157,6 +168,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       secRef.current += dt;
       setSeconds(Math.floor(secRef.current));
       if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
+      persist();
     }, 1000);
 
     sub.current = await Location.watchPositionAsync(
@@ -182,8 +194,45 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     );
   }
 
+  function persist() {
+    AsyncStorage.setItem(
+      TRIP_KEY,
+      JSON.stringify({
+        tripId: tripId.current, region: regionRef.current, period: periodRef.current,
+        fare: fareRef.current, dist: distRef.current, sec: secRef.current, at: Date.now(),
+      })
+    ).catch(() => {});
+  }
+
+  // Bring a running trip back after the page reloads or the screen remounts.
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(TRIP_KEY);
+        if (!raw || timer.current) return;
+        const s = JSON.parse(raw);
+        if (!s || Date.now() - s.at > 6 * 3600 * 1000) { await AsyncStorage.removeItem(TRIP_KEY); return; }
+        const perm = await Location.requestForegroundPermissionsAsync();
+        if (perm.status !== "granted") return;
+        tripId.current = s.tripId ?? null;
+        regionRef.current = s.region; periodRef.current = s.period;
+        setRegion(s.region); setPeriod(s.period);
+        const rates = getRate(s.region, s.period);
+        fareRef.current = s.fare;
+        distRef.current = s.dist;
+        secRef.current = s.sec + (Date.now() - s.at) / 1000;
+        speedRef.current = 0;
+        last.current = null;
+        setFare(s.fare); setDistance(s.dist); setSeconds(Math.floor(secRef.current));
+        setSaved("You are now offline. Switch Online on the Home tab when the trip is done.");
+        setIsRunning(true);
+        await runLoop(rates);
+      } catch {}
+    })();
+  }, []);
   async function stopMeter() {
     setIsRunning(false);
+    AsyncStorage.removeItem(TRIP_KEY).catch(() => {});
     if (timer.current) clearInterval(timer.current);
     if (sub.current) sub.current.remove();
     releaseWake();
