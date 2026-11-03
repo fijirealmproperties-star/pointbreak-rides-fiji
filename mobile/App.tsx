@@ -128,7 +128,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 1.2</Text>
+      <Text style={styles.surfTag}>Version 1.3</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
@@ -252,9 +252,14 @@ function Root() {
       ) : screen.name === "driver-trips" ? (
         <DriverTrips />
       ) : screen.name === "driver-meter" ? (
-        <DriverMeter />
+        null
       ) : screen.name === "profile" && user ? (
         <ProfileScreen user={user} onLogout={logout} />
+      ) : null}
+      {user?.role === "driver" && screen.name !== "login" ? (
+        <View style={screen.name === "driver-meter" ? { flex: 1 } : { display: "none" }}>
+          <DriverMeter />
+        </View>
       ) : null}
       {showTab && <TabBar active={activeTab} onTab={goTab} isDriver={user?.role === "driver"} />}
     </View>

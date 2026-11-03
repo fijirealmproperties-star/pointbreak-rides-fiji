@@ -77,14 +77,37 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const distRef = useRef(0);
   const secRef = useRef(0);
   const tripId = useRef<number | null>(null);
+  const wakeLock = useRef<any>(null);
+  const lastTick = useRef(0);
 
   useEffect(
     () => () => {
       if (timer.current) clearInterval(timer.current);
       if (sub.current) sub.current.remove();
+      releaseWake();
     },
     []
   );
+
+  async function holdWake() {
+    try {
+      const nav: any = typeof navigator !== "undefined" ? navigator : null;
+      if (nav?.wakeLock) wakeLock.current = await nav.wakeLock.request("screen");
+    } catch {}
+  }
+
+  function releaseWake() {
+    try { wakeLock.current?.release?.(); } catch {}
+    wakeLock.current = null;
+  }
+
+  // The screen lock is dropped when the page is hidden; take it again on return.
+  useEffect(() => {
+    if (!isRunning || typeof document === "undefined") return;
+    const onVis = () => { if (document.visibilityState === "visible") holdWake(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [isRunning]);
 
   function addFare(amount: number) {
     fareRef.current += amount;
@@ -124,10 +147,16 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setSeconds(0);
     setIsRunning(true);
 
+    holdWake();
+    lastTick.current = Date.now();
+    // Use real elapsed time so throttled timers don't under-count the trip.
     timer.current = setInterval(() => {
-      secRef.current += 1;
-      setSeconds(secRef.current);
-      if (speedRef.current <= WAIT_SPEED_KMH) addFare(rates.perMin / 60);
+      const now = Date.now();
+      const dt = Math.max(0, (now - lastTick.current) / 1000);
+      lastTick.current = now;
+      secRef.current += dt;
+      setSeconds(Math.floor(secRef.current));
+      if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
     }, 1000);
 
     sub.current = await Location.watchPositionAsync(
@@ -157,6 +186,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setIsRunning(false);
     if (timer.current) clearInterval(timer.current);
     if (sub.current) sub.current.remove();
+    releaseWake();
     timer.current = null;
     sub.current = null;
     const total = Number(fareRef.current.toFixed(2));
@@ -164,7 +194,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       trip_id: tripId.current,
       tariff_type: isAirport(region) ? region : `${region}_${period}`,
       total_fare: total,
-      trip_duration_seconds: secRef.current,
+      trip_duration_seconds: Math.round(secRef.current),
       trip_distance_km: Number(distRef.current.toFixed(2)),
     };
     try {
@@ -245,7 +275,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       ) : null}
       {saved ? <Text style={styles.saved}>{saved}</Text> : null}
       <Text style={styles.note}>
-        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute waiting. Keep the app open while the meter runs.
+        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute waiting. The screen stays awake and GPS keeps running while the meter runs. Your car is hidden from riders. Do not close the app during a trip.
       </Text>
     </View>
   );
