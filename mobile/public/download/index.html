@@ -100,6 +100,8 @@
   .hint { font-size: 12px; color: var(--muted); text-align: center; margin-top: 10px; }
   footer { margin-top: 30px; color: #5f7385; font-size: 12px; text-align: center; line-height: 1.6; }
   a { color: #7fb6ff; }
+  .warn { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: rgba(255,107,53,0.1); border: 1px solid rgba(255,107,53,0.45); color: var(--text); font-size: 14px; line-height: 1.5; }
+  .warn button { background: none; border: 0; color: #7fb6ff; text-decoration: underline; font: inherit; padding: 0; cursor: pointer; }
   .ios { display: none; }
   body.on-ios .ios { display: block; }
   body.on-ios .android { display: none; }
@@ -121,10 +123,12 @@
     <p class="ios">On iPhone, add Pointbreak to your Home Screen to use it like an app. This is not an App Store download.</p>
     <p class="android">Install Pointbreak on your Home Screen for quick access. It opens like an app and updates automatically.</p>
     <button id="install" class="btn" hidden>Install app</button>
+    <div id="inapp" class="warn" hidden><b>Open in your phone browser first.</b> You are inside another app (Facebook, Messenger, Instagram, etc.), which cannot install apps. Tap <b>&#8942; / Share</b> and choose <b>Open in Chrome</b> (Android) or <b>Open in Safari</b> (iPhone), or <button id="copy" type="button">copy the link</button>.</div>
 
     <div class="android">
       <ol>
-        <li>Tap <b>Install now</b> above (or the browser menu).</li>
+        <li>Open this page in <b>Chrome</b> (or Samsung Internet / Edge).</li>
+        <li>Tap <b>Install app</b> above, or the browser menu <b>&#8942;</b>.</li>
         <li>Choose <b>Install app</b> / <b>Add to Home screen</b>.</li>
         <li>Launch it from your home screen like any app.</li>
       </ol>
@@ -142,12 +146,6 @@
     <p class="hint android">Works on Android, iPhone and desktop. Updates itself automatically.</p>
   </section>
 
-  <section class="card">
-    <h2>Android APK</h2>
-    <p>Prefer a file you can share or sideload? Download the APK and open it on your phone.</p>
-    <a id="apk" class="btn secondary is-disabled" href="/downloads/pointbreak.apk" download>APK coming soon</a>
-    <p class="hint" id="apkHint">Android may ask you to allow installs from this site.</p>
-  </section>
 </main>
 
 <footer>
@@ -160,6 +158,15 @@
     var ua = navigator.userAgent || "";
     if (/iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)) {
       document.body.classList.add("on-ios");
+    }
+
+    if (/FBAN|FBAV|FB_IAB|Instagram|Messenger|Line\/|MicroMessenger|Snapchat|TikTok|; wv\)/i.test(ua)) {
+      document.getElementById("inapp").hidden = false;
+      document.getElementById("copy").addEventListener("click", function () {
+        var url = location.href;
+        if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { alert("Link copied. Paste it in Chrome or Safari."); });
+        else prompt("Copy this link:", url);
+      });
     }
 
     // Register the app's service worker so this page is installable too.
@@ -189,33 +196,6 @@
       installBtn.hidden = true;
     });
 
-    // Only enable the APK button if the file is actually published.
-    var apk = document.getElementById("apk");
-    var hint = document.getElementById("apkHint");
-
-    // A missing file falls through to the SPA shell (text/html) — ignore it, and
-    // ignore empty or truncated uploads too: a real APK is tens of MB.
-    function enableIfReal(type, size) {
-      if (/text\/html/i.test(type) || size < 1048576) return false;
-      apk.classList.remove("is-disabled");
-      apk.textContent = "Download APK";
-      hint.textContent = "Tap the downloaded file to install. Android may ask you to allow installs from this site.";
-      return true;
-    }
-
-    // HEAD is the cheap probe, but some proxies and tunnels drop it. Fall back to
-    // a one-byte ranged GET, whose Content-Range carries the real file size.
-    fetch(apk.getAttribute("href"), { method: "HEAD" })
-      .then(function (res) {
-        if (res.ok && enableIfReal(res.headers.get("content-type") || "", Number(res.headers.get("content-length") || 0))) return;
-        return fetch(apk.getAttribute("href"), { headers: { Range: "bytes=0-0" } })
-          .then(function (r2) {
-            var range = r2.headers.get("content-range") || "";
-            var total = Number((range.split("/")[1] || "0").trim());
-            enableIfReal(r2.headers.get("content-type") || "", total);
-          });
-      })
-      .catch(function () {});
   })();
 </script>
 </body>
