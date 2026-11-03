@@ -319,26 +319,6 @@ export default function LoginScreen({ onLogin }: Props) {
             </TouchableOpacity>
           ) : null}
 
-          {demo ? (
-            <>
-              <TouchableOpacity
-                style={styles.demoBtn}
-                onPress={() => demoLogin(driverApp ? DEMO_DRIVER : DEMO_RIDER)}
-                disabled={busy}
-              >
-                <Text style={styles.demoBtnText}>
-                  {driverApp ? "Use demo driver (+679 9001001)" : "Use demo rider (+679 7770001)"}
-                </Text>
-              </TouchableOpacity>
-
-              <Text style={styles.demo}>
-                {driverApp
-                  ? "Demo driver: +6799001001 / driver123"
-                  : "Demo — rider: +6797770001 / rider123 · driver: +6799001001 / driver123"}
-              </Text>
-            </>
-          ) : null}
-
           {demo && Platform.OS === "web" && !driverApp ? (
             <TouchableOpacity style={styles.driverLink} onPress={openDriverApp}>
               <Text style={styles.driverLinkText}>🚕 Open driver app (for testing)</Text>
