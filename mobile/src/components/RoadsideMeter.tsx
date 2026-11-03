@@ -81,6 +81,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const secRef = useRef(0);
   const tripId = useRef<number | null>(null);
   const wakeLock = useRef<any>(null);
+  const runningRef = useRef(false);
   const regionRef = useRef<Region>("VITI_LEVU");
   const periodRef = useRef<Period>(autoPeriod());
   const lastTick = useRef(0);
@@ -158,10 +159,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   }
 
   async function runLoop(rates: Rate) {
+    runningRef.current = true;
     holdWake();
     lastTick.current = Date.now();
     // Use real elapsed time so throttled timers don't under-count the trip.
     timer.current = setInterval(() => {
+      if (!runningRef.current) return;
       const now = Date.now();
       const dt = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
@@ -171,9 +174,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       persist();
     }, 1000);
 
-    sub.current = await Location.watchPositionAsync(
+    const subscription = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 2 },
       (loc) => {
+        if (!runningRef.current) return;
         const { latitude, longitude, speed } = loc.coords;
         const now = Date.now();
         const prev = last.current;
@@ -192,9 +196,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         last.current = { lat: latitude, lng: longitude, t: now };
       }
     );
+    if (runningRef.current) sub.current = subscription;
+    else subscription.remove();
   }
 
   function persist() {
+    if (!runningRef.current) return;
     AsyncStorage.setItem(
       TRIP_KEY,
       JSON.stringify({
@@ -209,7 +216,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     (async () => {
       try {
         const raw = await AsyncStorage.getItem(TRIP_KEY);
-        if (!raw || timer.current) return;
+        if (!raw || timer.current || runningRef.current) return;
         const s = JSON.parse(raw);
         if (!s || Date.now() - s.at > 6 * 3600 * 1000) { await AsyncStorage.removeItem(TRIP_KEY); return; }
         const perm = await Location.requestForegroundPermissionsAsync();
@@ -231,13 +238,14 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     })();
   }, []);
   async function stopMeter() {
+    runningRef.current = false;
     setIsRunning(false);
-    AsyncStorage.removeItem(TRIP_KEY).catch(() => {});
     if (timer.current) clearInterval(timer.current);
     if (sub.current) sub.current.remove();
     releaseWake();
     timer.current = null;
     sub.current = null;
+    AsyncStorage.removeItem(TRIP_KEY).catch(() => {});
     const total = Number(fareRef.current.toFixed(2));
     const body = {
       trip_id: tripId.current,
@@ -250,6 +258,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       await api("/drivers/roadside", { method: "POST", body });
     } catch {}
     tripId.current = null;
+    await AsyncStorage.removeItem(TRIP_KEY).catch(() => {});
     setLastTotal(total);
     setSaved(null);
     // Back to the starting rate for the next trip.
