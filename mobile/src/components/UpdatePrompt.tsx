@@ -10,8 +10,8 @@ function currentBuild(): string | null {
 }
 
 export default function UpdatePrompt() {
-  const [available, setAvailable] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [available, setAvailable] = useState<string | null>(null);
+  const [dismissed, setDismissed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const check = useCallback(async () => {
@@ -21,7 +21,7 @@ export default function UpdatePrompt() {
       const res = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
       if (!res.ok) return;
       const data = await res.json();
-      if (data && typeof data.build === "string" && data.build !== mine) setAvailable(true);
+      if (data && typeof data.build === "string" && data.build !== mine) setAvailable(data.build);
     } catch {}
   }, []);
 
@@ -32,7 +32,13 @@ export default function UpdatePrompt() {
       if (document.visibilityState === "visible") check();
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", check);
+    const timer = setInterval(check, 20000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", check);
+      clearInterval(timer);
+    };
   }, [check]);
 
   async function update() {
@@ -49,7 +55,7 @@ export default function UpdatePrompt() {
   if (Platform.OS !== "web") return null;
 
   return (
-    <Modal visible={available && !dismissed} transparent animationType="fade" onRequestClose={() => setDismissed(true)}>
+    <Modal visible={!!available && dismissed !== available} transparent animationType="fade" onRequestClose={() => setDismissed(available)}>
       <View style={styles.backdrop}>
         <View style={styles.box}>
           <Text style={styles.title}>Update available</Text>
@@ -57,7 +63,7 @@ export default function UpdatePrompt() {
           <TouchableOpacity style={styles.primary} onPress={update} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Updating…" : "Update"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.later} onPress={() => setDismissed(true)} disabled={busy}>
+          <TouchableOpacity style={styles.later} onPress={() => setDismissed(available)} disabled={busy}>
             <Text style={styles.laterText}>Later</Text>
           </TouchableOpacity>
         </View>
