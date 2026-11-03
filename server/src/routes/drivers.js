@@ -136,7 +136,7 @@ module.exports = (db, matchingEngine) => {
   router.post('/roadside', (req, res) => {
     const { tariff_type, total_fare, trip_duration_seconds, trip_distance_km } = req.body || {};
     const fare = Number(total_fare);
-    if (!['day', 'night', 'airport'].includes(tariff_type) || !Number.isFinite(fare) || fare < 0 || fare > 100000) {
+    if (!/^[A-Z_a-z]{3,40}$/.test(String(tariff_type || '')) || !Number.isFinite(fare) || fare < 0 || fare > 100000) {
       return res.status(400).json({ error: 'Invalid roadside trip' });
     }
     const driver = driverFor(req.user.userId);

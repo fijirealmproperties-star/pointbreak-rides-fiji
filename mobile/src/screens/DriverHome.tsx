@@ -29,6 +29,8 @@ type DriverStats = {
   total_earnings: number;
 };
 
+import RoadsideMeter from "../components/RoadsideMeter";
+
 export default function DriverHome({ onOpenRide }: Props) {
   const insets = useSafeAreaInsets();
   const [online, setOnline] = useState(false);
@@ -401,6 +403,9 @@ export default function DriverHome({ onOpenRide }: Props) {
           />
         }
       >
+        <View style={{ marginBottom: 12 }}>
+          <RoadsideMeter />
+        </View>
         {lastRefresh ? (
           <Text style={styles.refreshStamp}>Updated {lastRefresh}</Text>
         ) : null}
