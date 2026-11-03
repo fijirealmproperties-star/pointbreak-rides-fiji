@@ -1,0 +1,72 @@
+name: android apk
+
+# Wraps the web build in a Capacitor Android shell and publishes a signed-with-debug-key
+# APK to the "apk-latest" release:
+#   https://github.com/<owner>/<repo>/releases/download/apk-latest/pointbreak.apk
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - mobile/**
+      - .github/workflows/android-apk.yml
+  workflow_dispatch:
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    env:
+      EXPO_PUBLIC_API_URL: https://pointbreak-rides-fiji-production.up.railway.app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build web app
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run export
+
+      - name: Create Android project
+        working-directory: mobile
+        run: |
+          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "fj.pointbreak.rides",
+            "appName": "Pointbreak",
+            "webDir": "dist",
+            "backgroundColor": "#0A1628",
+            "server": { "androidScheme": "https" }
+          }
+          EOF
+          npx cap add android
+          npx cap sync android
+          M=android/app/src/main/AndroidManifest.xml
+          sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.POST_NOTIFICATIONS" /><application#' "$M"
+          sed -i 's#<application#<application android:usesCleartextTraffic="false"#' "$M"
+
+      - name: Build APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp mobile/android/app/build/outputs/apk/debug/app-debug.apk pointbreak.apk
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest pointbreak.apk --title "Pointbreak Android app" --notes "Latest Android APK" --latest=false

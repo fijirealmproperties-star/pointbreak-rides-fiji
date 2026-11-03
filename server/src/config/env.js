@@ -47,6 +47,8 @@ function assertProductionEnv() {
 // always allowed. Browsers are only allowed from explicit origins.
 function isAllowedOrigin(origin) {
   if (!origin) return true;
+  // Origins used by the installable Android app wrapper.
+  if (origin === 'https://localhost' || origin === 'capacitor://localhost') return true;
   if (CORS_ORIGINS.length) return CORS_ORIGINS.includes(origin);
   return !IS_PROD;
 }
