@@ -14,16 +14,23 @@
       <span class="header-subtitle">Admin Dashboard</span>
     </div>
     <div class="header-right">
-      <a href="#messaging" class="reg-btn" style="text-decoration:none">💬 Messaging</a>
+      
       <button id="refresh-btn" class="reg-btn reg-btn-ghost" onclick="refreshDashboard()">⟳ Refresh</button>
       <span class="badge" id="connection-status">Connecting...</span>
     </div>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn" data-go="live" onclick="showTab('live')">🗺 Live Rides</button>
+    <button class="tab-btn" data-go="bookings" onclick="showTab('bookings')">📅 Bookings &amp; Meter</button>
+    <button class="tab-btn" data-go="messaging" onclick="showTab('messaging')">💬 Messaging &amp; Notifications</button>
+    <button class="tab-btn" data-go="users" onclick="showTab('users')">👥 Users</button>
+  </nav>
+
   <section class="register-section" style="padding-top:10px;padding-bottom:10px">
     <div class="register-row">
-      <input id="global-search" class="reg-input" style="flex:1" placeholder="🔍 Find any rider or driver — name, phone, email, plate" oninput="globalFind()" onkeydown="if(event.key==='Enter')document.getElementById('accounts').scrollIntoView({behavior:'smooth'})" />
-      <a href="#accounts" class="reg-btn" style="text-decoration:none">Go to Accounts</a>
+      <input id="global-search" class="reg-input" style="flex:1" placeholder="🔍 Find any rider or driver — name, phone, email, plate" oninput="globalFind()" onkeydown="if(event.key==='Enter')showTab('users')" />
+      <a href="#users" class="reg-btn" style="text-decoration:none" onclick="showTab('users');return false">Go to Users</a>
     </div>
   </section>
 
@@ -89,7 +96,7 @@
     </div>
   </section>
 
-  <section class="register-section" id="scheduled">
+  <section class="register-section" id="scheduled" data-tab="bookings">
     <div class="section-header">
       <h2>📅 Booked in advance</h2>
       <span class="register-status" id="sched-count"></span>
@@ -99,7 +106,7 @@
     <div id="sched-list"><p class="empty">No advance bookings yet.</p></div>
   </section>
 
-  <section class="register-section" id="roadside">
+  <section class="register-section" id="roadside" data-tab="bookings">
     <div class="section-header">
       <h2>🚕 Roadside meter trips</h2>
       <span class="register-status" id="roadside-count"></span>
@@ -107,7 +114,7 @@
     <div id="roadside-list"><p class="empty">No roadside trips yet.</p></div>
   </section>
 
-  <section class="register-section" id="messaging">
+  <section class="register-section" id="messaging" data-tab="messaging">
     <div class="section-header">
       <h2>💬 Messaging — send notifications to users</h2>
       <span class="register-status" id="notice-status"></span>
@@ -136,7 +143,7 @@
     <div id="notice-list" class="admin-hint"></div>
   </section>
 
-  <section class="register-section">
+  <section class="register-section" data-tab="users">
     <div class="section-header">
       <h2>Register Driver</h2>
       <span class="register-status" id="reg-status"></span>
@@ -153,7 +160,7 @@
     </div>
   </section>
 
-  <section class="register-section" id="accounts">
+  <section class="register-section" id="accounts" data-tab="users">
     <div class="section-header">
       <h2>👥 Accounts</h2>
       <span class="register-status" id="acct-status"></span>
@@ -173,7 +180,7 @@
     <div id="acct-detail" style="margin-top:12px"></div>
   </section>
 
-  <section class="map-section">
+  <section class="map-section" data-tab="live">
     <div class="section-header">
       <h2>Live Map</h2>
       <span class="driver-count" id="map-count">0 on map</span>
@@ -182,7 +189,7 @@
     <div class="map-legend">🚗 Driver &nbsp; 🙋 Online rider &nbsp; 🧍 Rider pickup &nbsp; 🏁 Drop-off &nbsp; Click any marker for details</div>
   </section>
 
-  <main>
+  <main data-tab="live">
     <section class="rides-section">
       <div class="section-header">
         <h2>Live Rides</h2>

@@ -950,6 +950,7 @@ function startAssign(rideId) {
   }
   renderScheduled();
   renderMap();
+  showTab('live');
   const m = document.querySelector('.map-section');
   if (m) m.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -982,3 +983,15 @@ async function assignDriver(driverId) {
     alert('Network error � try again.');
   }
 }
+
+
+// ---- Tabs ----
+function showTab(name) {
+  if (!['live','bookings','messaging','users'].includes(name)) name = 'live';
+  document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('tab-hidden', el.dataset.tab !== name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.go === name));
+  try { localStorage.setItem('pb-admin-tab', name); } catch (e) {}
+  if (name === 'live' && typeof liveMap !== 'undefined' && liveMap) setTimeout(() => liveMap.invalidateSize(), 50);
+}
+showTab((location.hash || '').slice(1) || (function () { try { return localStorage.getItem('pb-admin-tab'); } catch (e) { return null; } })() || 'live');
+window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h) showTab(h); });
