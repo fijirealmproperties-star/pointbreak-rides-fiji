@@ -43,7 +43,7 @@ jobs:
       - name: Create Android project
         working-directory: mobile
         run: |
-          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "fj.pointbreak.rides",
@@ -59,7 +59,6 @@ jobs:
           cp public/icons/icon-maskable-512.png assets/icon-foreground.png
           sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
           (command -v magick >/dev/null && magick -size 1024x1024 xc:'#02266E' assets/icon-background.png) || convert -size 1024x1024 xc:'#02266E' assets/icon-background.png
-          npm install --no-save @capacitor/assets@3
           npx capacitor-assets generate --android --iconBackgroundColor '#02266E'
           npx cap sync android
           M=android/app/src/main/AndroidManifest.xml
