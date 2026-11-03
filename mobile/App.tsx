@@ -31,6 +31,7 @@ import DriverTrips from "./src/screens/DriverTrips";
 import DriverMeter from "./src/screens/DriverMeter";
 import NoticeBell from "./src/components/NoticeBell";
 import ShareAppCard from "./src/components/ShareAppCard";
+import UpdatePrompt from "./src/components/UpdatePrompt";
 
 type TabKey = "home" | "trips" | "meter" | "profile";
 

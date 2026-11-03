@@ -29,6 +29,7 @@ const TAGS = `
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Pointbreak" />
+    <meta name="pb-build" content="__PB_BUILD__" />
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <script>
@@ -56,7 +57,10 @@ if (!html.includes('rel="manifest"')) {
 // Stamp the service-worker cache name with a hash of this build's HTML (which
 // references the hashed JS/CSS names). A new deploy therefore gets a new cache
 // and the activate handler deletes the previous one.
-const build = require("crypto").createHash("sha1").update(html).digest("hex").slice(0, 10);
+const build = require("crypto").createHash("sha1").update(html.replace(/<meta name="pb-build"[^>]*>/, "")).digest("hex").slice(0, 10);
+html = html.replace(/(<meta name="pb-build" content=")[^"]*(")/, "$1" + build + "$2");
+fs.writeFileSync(indexFile, html);
+fs.writeFileSync(path.join(dist, "version.json"), JSON.stringify({ build }));
 const swFile = path.join(dist, "sw.js");
 if (fs.existsSync(swFile)) {
   const sw = fs.readFileSync(swFile, "utf8").replace(/const VERSION = "[^"]*";/, `const VERSION = "pb-${build}";`);

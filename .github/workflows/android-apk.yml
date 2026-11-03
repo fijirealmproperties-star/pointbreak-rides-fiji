@@ -50,7 +50,7 @@ jobs:
             "appName": "Pointbreak",
             "webDir": "dist",
             "backgroundColor": "#0A1628",
-            "server": { "androidScheme": "https" }
+            "server": { "url": "https://pointbreakridesfj.site.je", "androidScheme": "https", "allowNavigation": ["pointbreakridesfj.site.je", "*.site.je", "pointbreak-rides-fiji-production.up.railway.app"] }
           }
           EOF
           npx cap add android
