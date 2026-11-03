@@ -167,15 +167,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       trip_duration_seconds: secRef.current,
       trip_distance_km: Number(distRef.current.toFixed(2)),
     };
-    let sent = true;
     try {
       await api("/drivers/roadside", { method: "POST", body });
-    } catch {
-      sent = false;
-    }
+    } catch {}
     tripId.current = null;
     setLastTotal(total);
-    setSaved(sent ? "Trip total sent to admin." : "Could not send this trip to admin — check your connection.");
+    setSaved(null);
     // Back to the starting rate for the next trip.
     const base = getRate(region, period).base;
     fareRef.current = base;
