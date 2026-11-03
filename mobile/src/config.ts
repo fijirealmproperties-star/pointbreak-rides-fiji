@@ -25,4 +25,4 @@ export const API_URL =
   (process.env.EXPO_PUBLIC_API_URL || "").replace(/\/+$/, "") || fallbackApiUrl();
 
 // Demo accounts/buttons are visible unless a build explicitly turns them off.
-export const DEMO_ENABLED = process.env.EXPO_PUBLIC_DEMO !== "false";
+export const DEMO_ENABLED = process.env.EXPO_PUBLIC_DEMO === "true";

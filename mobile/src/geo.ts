@@ -61,10 +61,22 @@ function hasBrowserGeolocation(): boolean {
 }
 
 export function watchCurrentLocation(
-  onPosition: (position: CurrentLocation) => void,
+  emitPosition: (position: CurrentLocation) => void,
   onError?: (error: Error) => void,
   maximumAccuracy = 250
 ): () => void {
+  // Ignore GPS jitter: small moves inside the error radius while slow are noise.
+  let last: CurrentLocation | null = null;
+  const onPosition = (p: CurrentLocation) => {
+    if (last) {
+      const moved = haversine(last.lat, last.lng, p.lat, p.lng) * 1000;
+      const slow = p.speed == null || p.speed < 1.5;
+      const noise = Math.max(last.accuracy, p.accuracy, 15);
+      if (slow && moved < noise) return;
+    }
+    last = p;
+    emitPosition(p);
+  };
   if (hasBrowserGeolocation()) {
     let active = true;
     const watchId = navigator.geolocation.watchPosition(
