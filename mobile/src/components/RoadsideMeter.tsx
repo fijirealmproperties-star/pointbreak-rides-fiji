@@ -3,6 +3,7 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
+import { TripTracker, GpsState } from "../gpsFilter";
 import { colors, typography } from "../theme";
 
 const TRIP_KEY = "pb-active-trip";
@@ -82,6 +83,9 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const tripId = useRef<number | null>(null);
   const wakeLock = useRef<any>(null);
   const runningRef = useRef(false);
+  const tracker = useRef(new TripTracker());
+  const lastRestart = useRef(0);
+  const [gps, setGps] = useState<GpsState>("searching");
   const startReq = useRef<Promise<number | null>>(Promise.resolve(null));
   const regionRef = useRef<Region>("VITI_LEVU");
   const periodRef = useRef<Period>(autoPeriod());
@@ -159,7 +163,18 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   async function runLoop(rates: Rate) {
     runningRef.current = true;
     holdWake();
+    const tr = tracker.current;
+    tr.reset();
+    setGps("searching");
     lastTick.current = Date.now();
+
+    const charge = (km: number) => {
+      if (km <= 0) return;
+      distRef.current += km;
+      setDistance(distRef.current);
+      if (tr.speedKmh > WAIT_SPEED_KMH) addFare(km * rates.perKm);
+    };
+
     // Use real elapsed time so throttled timers don't under-count the trip.
     timer.current = setInterval(() => {
       if (!runningRef.current) return;
@@ -168,36 +183,51 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       lastTick.current = now;
       secRef.current += dt;
       setSeconds(Math.floor(secRef.current));
-      if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
+      // Weak signal: keep estimating distance from the last good speed.
+      const est = tr.tick(now);
+      if (est > 0) {
+        distRef.current += est;
+        setDistance(distRef.current);
+        if (tr.speedKmh > WAIT_SPEED_KMH) addFare(est * rates.perKm);
+      }
+      if (tr.speedKmh <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
+      setGps(tr.state);
+      // Some phones silently stall the GPS in weak areas: restart it.
+      if (tr.silentFor(now) > 12000 && now - lastRestart.current > 12000) {
+        lastRestart.current = now;
+        startWatch(charge);
+      }
       persist();
     }, 1000);
 
+    await startWatch(charge);
+  }
+
+  async function startWatch(charge: (km: number) => void) {
+    const tr = tracker.current;
+    const old = sub.current;
+    sub.current = null;
+    try { old?.remove(); } catch {}
     const subscription = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 2 },
+      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
       (loc) => {
         if (!runningRef.current) return;
-        const { latitude, longitude, speed } = loc.coords;
-        const now = Date.now();
-        const prev = last.current;
-        if (prev) {
-          const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
-          const dt = (now - prev.t) / 1000;
-          // Browsers often report no speed, so derive it from movement.
-          const kmh = speed != null && speed >= 0 ? speed * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
-          speedRef.current = kmh;
-          if (dKm > 0.002) {
-            distRef.current += dKm;
-            setDistance(distRef.current);
-            if (kmh > WAIT_SPEED_KMH) addFare(dKm * rates.perKm);
-          }
-        }
-        last.current = { lat: latitude, lng: longitude, t: now };
+        const c = loc.coords;
+        charge(
+          tr.ingest({
+            lat: c.latitude,
+            lng: c.longitude,
+            accuracy: c.accuracy,
+            speed: c.speed,
+            t: loc.timestamp || Date.now(),
+          })
+        );
+        setGps(tr.state);
       }
     );
     if (runningRef.current) sub.current = subscription;
     else subscription.remove();
   }
-
   function persist() {
     if (!runningRef.current) return;
     AsyncStorage.setItem(
@@ -306,6 +336,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         <Text style={styles.label}>Running total</Text>
       </View>
 
+      {isRunning ? (
+        <Text style={[styles.gpsLine, gps === "good" ? styles.gpsGood : styles.gpsWeak]}>
+          {gps === "good" ? "📡 GPS strong" : gps === "weak" ? "⚠️ GPS signal weak — estimating distance until it returns" : "🛰 Searching for GPS…"}
+        </Text>
+      ) : null}
+
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statVal}>{distance.toFixed(2)}</Text>
@@ -356,6 +392,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 11, color: "#888", textTransform: "uppercase", marginTop: 4 },
   statsContainer: { flexDirection: "row", backgroundColor: "#181818", padding: 15, borderRadius: 10, marginBottom: 20 },
   statBox: { flex: 1, alignItems: "center" },
+  gpsLine: { textAlign: "center", fontSize: 13, fontWeight: "700", marginBottom: 8 },
+  gpsGood: { color: "#22CC66" },
+  gpsWeak: { color: "#E8A820" },
   statVal: { fontSize: 18, fontWeight: "bold", color: "#fff" },
   actionButton: { padding: 16, borderRadius: 12, alignItems: "center" },
   startBg: { backgroundColor: "#03dac6" },

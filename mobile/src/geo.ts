@@ -79,9 +79,10 @@ export function watchCurrentLocation(
   };
   if (hasBrowserGeolocation()) {
     let active = true;
-    const watchId = navigator.geolocation.watchPosition(
-      (position) => {
+    let lastFixAt = Date.now();
+    const onOk = (position: GeolocationPosition) => {
         if (!active) return;
+        lastFixAt = Date.now();
         const { latitude, longitude, accuracy, speed } = position.coords;
         if (
           !Number.isFinite(latitude) ||
@@ -98,14 +99,22 @@ export function watchCurrentLocation(
           return;
         }
         onPosition({ lat: latitude, lng: longitude, accuracy, speed: Number.isFinite(speed as number) ? speed : null });
-      },
-      (error) => {
-        if (active) onError?.(browserLocationError(error));
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 }
-    );
+    };
+    const onErr = (error: GeolocationPositionError) => {
+      if (active) onError?.(browserLocationError(error));
+    };
+    const opts = { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 };
+    let watchId = navigator.geolocation.watchPosition(onOk, onErr, opts);
+    // Browsers can stall the GPS in weak areas; restart the watch if it goes quiet.
+    const watchdog = setInterval(() => {
+      if (!active || Date.now() - lastFixAt < 12000) return;
+      navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(onOk, onErr, opts);
+      lastFixAt = Date.now();
+    }, 6000);
     return () => {
       active = false;
+      clearInterval(watchdog);
       navigator.geolocation.clearWatch(watchId);
     };
   }
