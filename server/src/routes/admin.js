@@ -46,6 +46,17 @@ module.exports = (db, matchingEngine) => {
   });
 
   // Live map data for the admin dashboard (auth required — contains rider phones).
+  router.get('/roadside', (req, res) => {
+    const trips = db.prepare(`
+      SELECT t.*, COALESCE(d.full_name, u.name) AS driver_name, COALESCE(d.phone, u.phone) AS driver_phone
+      FROM roadside_trips t
+      LEFT JOIN drivers d ON d.id = t.driver_id
+      LEFT JOIN users u ON u.id = t.driver_id
+      ORDER BY t.id DESC LIMIT 200
+    `).all();
+    res.json({ trips });
+  });
+
   router.get('/rides/all', (req, res) => {
     const rides = db.prepare(`
       SELECT r.*, d.full_name AS driver_name, u.name AS rider_name, u.phone AS rider_phone, u.email AS rider_email

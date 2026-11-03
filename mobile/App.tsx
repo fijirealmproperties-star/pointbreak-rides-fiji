@@ -28,21 +28,23 @@ import RiderTrips from "./src/screens/RiderTrips";
 import DriverHome from "./src/screens/DriverHome";
 import DriverActiveRide from "./src/screens/DriverActiveRide";
 import DriverTrips from "./src/screens/DriverTrips";
+import DriverMeter from "./src/screens/DriverMeter";
 import NoticeBell from "./src/components/NoticeBell";
 
-type TabKey = "home" | "trips" | "profile";
+type TabKey = "home" | "trips" | "meter" | "profile";
 
 const TABS: Array<{ key: TabKey; label: string; icon: string }> = [
   { key: "home", label: "Home", icon: "🏠" },
   { key: "trips", label: "Trips", icon: "📋" },
+  { key: "meter", label: "Meter", icon: "🚕" },
   { key: "profile", label: "Profile", icon: "👤" },
 ];
 
-function TabBar({ active, onTab }: { active: TabKey | null; onTab: (t: TabKey) => void }) {
+function TabBar({ active, onTab, isDriver }: { active: TabKey | null; onTab: (t: TabKey) => void; isDriver: boolean }) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[styles.tabbar, { paddingBottom: insets.bottom }]}>
-      {TABS.map((t) => {
+      {TABS.filter((t) => isDriver || t.key !== "meter").map((t) => {
         const isActive = active === t.key;
         return (
           <TouchableOpacity key={t.key} style={styles.tab} onPress={() => onTab(t.key)}>
@@ -175,6 +177,8 @@ function Root() {
     } else if (tab === "trips") {
       const next: Screen = user.role === "driver" ? { name: "driver-trips" } : { name: "rider-trips" };
       setScreen(next);
+    } else if (tab === "meter") {
+      setScreen({ name: "driver-meter" });
     } else {
       setScreen({ name: "profile" });
     }
@@ -204,6 +208,7 @@ function Root() {
   let activeTab: TabKey | null = null;
   if (screen.name === "rider-home" || screen.name === "driver-home") activeTab = "home";
   else if (screen.name === "rider-trips" || screen.name === "driver-trips") activeTab = "trips";
+  else if (screen.name === "driver-meter") activeTab = "meter";
   else if (screen.name === "profile") activeTab = "profile";
 
   const showTab =
@@ -241,10 +246,12 @@ function Root() {
         />
       ) : screen.name === "driver-trips" ? (
         <DriverTrips />
+      ) : screen.name === "driver-meter" ? (
+        <DriverMeter />
       ) : screen.name === "profile" && user ? (
         <ProfileScreen user={user} onLogout={logout} />
       ) : null}
-      {showTab && <TabBar active={activeTab} onTab={goTab} />}
+      {showTab && <TabBar active={activeTab} onTab={goTab} isDriver={user?.role === "driver"} />}
     </View>
   );
 }

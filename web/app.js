@@ -535,7 +535,22 @@ function updateDriverInList(driver) {
   }
 }
 
+async function loadRoadside() {
+  const list = document.getElementById("roadside-list");
+  if (!list || !adminToken) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/roadside`, { headers: { Authorization: "Bearer " + adminToken } });
+    if (!res.ok) return;
+    const { trips } = await res.json();
+    document.getElementById("roadside-count").textContent = `${trips.length} trips`;
+    if (!trips.length) { list.innerHTML = `<p class="empty">No roadside trips yet.</p>`; return; }
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left"><th>When</th><th>Driver</th><th>Tariff</th><th>Distance</th><th>Time</th><th>Fare</th></tr>` +
+      trips.map(t => `<tr style="border-top:1px solid #ddd"><td>${escapeHtml(fmtFijiDateTime(parseDbUtc(t.created_at)))}</td><td>${escapeHtml(t.driver_name || "Driver")}<br><small>${escapeHtml(t.driver_phone || "")}</small></td><td>${escapeHtml(t.tariff_type)}</td><td>${Number(t.trip_distance_km).toFixed(2)} km</td><td>${Math.floor(t.trip_duration_seconds / 60)}m ${t.trip_duration_seconds % 60}s</td><td><b>FJ$ ${Number(t.total_fare).toFixed(2)}</b></td></tr>`).join("") + `</table>`;
+  } catch {}
+}
+
 function renderAll() {
+  loadRoadside();
   renderScheduled();
   renderStats();
   renderRides();

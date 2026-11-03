@@ -49,6 +49,16 @@ CREATE TABLE IF NOT EXISTS places (
   region TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS roadside_trips (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  driver_id TEXT NOT NULL,
+  tariff_type TEXT NOT NULL,
+  total_fare REAL NOT NULL,
+  trip_duration_seconds INTEGER NOT NULL DEFAULT 0,
+  trip_distance_km REAL NOT NULL DEFAULT 0,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS rides (
   id TEXT PRIMARY KEY,
   rider_id TEXT NOT NULL,

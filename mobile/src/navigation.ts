@@ -6,4 +6,5 @@ export type Screen =
   | { name: "driver-home" }
   | { name: "driver-active-ride"; rideId: string }
   | { name: "driver-trips" }
+  | { name: "driver-meter" }
   | { name: "profile" };

@@ -133,5 +133,18 @@ module.exports = (db, matchingEngine) => {
     res.json({ ok: true, lat, lng });
   });
 
+  router.post('/roadside', (req, res) => {
+    const { tariff_type, total_fare, trip_duration_seconds, trip_distance_km } = req.body || {};
+    const fare = Number(total_fare);
+    if (!['day', 'night', 'airport'].includes(tariff_type) || !Number.isFinite(fare) || fare < 0 || fare > 100000) {
+      return res.status(400).json({ error: 'Invalid roadside trip' });
+    }
+    const driver = driverFor(req.user.userId);
+    db.prepare('INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km) VALUES (?, ?, ?, ?, ?)')
+      .run(driver ? driver.id : req.user.userId, tariff_type, fare,
+        Math.max(0, Math.round(Number(trip_duration_seconds) || 0)), Math.max(0, Number(trip_distance_km) || 0));
+    res.json({ ok: true });
+  });
+
   return router;
 };
