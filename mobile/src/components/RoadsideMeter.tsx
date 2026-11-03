@@ -82,6 +82,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const tripId = useRef<number | null>(null);
   const wakeLock = useRef<any>(null);
   const runningRef = useRef(false);
+  const startReq = useRef<Promise<number | null>>(Promise.resolve(null));
   const regionRef = useRef<Region>("VITI_LEVU");
   const periodRef = useRef<Period>(autoPeriod());
   const lastTick = useRef(0);
@@ -128,36 +129,33 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   }
 
   async function startMeter() {
-    const perm = await Location.requestForegroundPermissionsAsync();
-    if (perm.status !== "granted") {
-      Alert.alert("Permission needed", "Location access is required to run the meter.");
-      return;
-    }
+    if (runningRef.current) return;
     regionRef.current = region;
     periodRef.current = period;
     const rates = getRate(region, period);
     const tariffKey = isAirport(region) ? region : `${region}_${period}`;
-    try {
-      const r: any = await api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffKey } });
-      tripId.current = r?.trip_id ?? null;
-    } catch (e: any) {
-      Alert.alert("Cannot start trip", e?.message || "Check your connection and try again.");
-      return;
-    }
-    setSaved("You are now offline. Switch Online on the Home tab when the trip is done.");
     fareRef.current = rates.base;
     distRef.current = 0;
     secRef.current = 0;
     speedRef.current = 0;
     last.current = null;
+    tripId.current = null;
     setFare(rates.base);
     setDistance(0);
     setSeconds(0);
+    setLastTotal(null);
+    setSaved("You are now offline. Switch Online on the Home tab when the trip is done.");
     setIsRunning(true);
-
-    await runLoop(rates);
+    // The meter starts instantly; the server is told in the background.
+    startReq.current = api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffKey } })
+      .then((r: any) => { tripId.current = r?.trip_id ?? null; return tripId.current; })
+      .catch(() => null);
+    try {
+      await runLoop(rates);
+    } catch {
+      Alert.alert("Location needed", "Allow location access so the meter can measure distance.");
+    }
   }
-
   async function runLoop(rates: Rate) {
     runningRef.current = true;
     holdWake();
@@ -254,11 +252,9 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       trip_duration_seconds: Math.round(secRef.current),
       trip_distance_km: Number(distRef.current.toFixed(2)),
     };
-    try {
-      await api("/drivers/roadside", { method: "POST", body });
-    } catch {}
+    const tariff = body.tariff_type;
+    const snapshot = { ...body };
     tripId.current = null;
-    await AsyncStorage.removeItem(TRIP_KEY).catch(() => {});
     setLastTotal(total);
     setSaved(null);
     // Back to the starting rate for the next trip.
@@ -269,8 +265,11 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setFare(base);
     setDistance(0);
     setSeconds(0);
+    // Saving happens in the background so End Trip responds instantly.
+    startReq.current.then(async (id) => {
+      try { await api("/drivers/roadside", { method: "POST", body: { ...snapshot, trip_id: snapshot.trip_id ?? id, tariff_type: tariff } }); } catch {}
+    });
   }
-
   const rateNow = getRate(region, period);
   return (
     <View style={styles.container}>
