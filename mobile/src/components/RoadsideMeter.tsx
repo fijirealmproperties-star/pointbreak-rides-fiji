@@ -67,6 +67,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const [distance, setDistance] = useState(0);
   const [seconds, setSeconds] = useState(0);
   const [saved, setSaved] = useState<string | null>(null);
+  const [lastTotal, setLastTotal] = useState<number | null>(null);
 
   const sub = useRef<Location.LocationSubscription | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -75,6 +76,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const fareRef = useRef<number>(getRate("VITI_LEVU", autoPeriod()).base);
   const distRef = useRef(0);
   const secRef = useRef(0);
+  const tripId = useRef<number | null>(null);
 
   useEffect(
     () => () => {
@@ -103,7 +105,15 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       return;
     }
     const rates = getRate(region, period);
-    setSaved(null);
+    const tariffKey = isAirport(region) ? region : `${region}_${period}`;
+    try {
+      const r: any = await api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffKey } });
+      tripId.current = r?.trip_id ?? null;
+    } catch (e: any) {
+      Alert.alert("Cannot start trip", e?.message || "Check your connection and try again.");
+      return;
+    }
+    setSaved("You are now offline. Switch Online on the Home tab when the trip is done.");
     fareRef.current = rates.base;
     distRef.current = 0;
     secRef.current = 0;
@@ -149,21 +159,31 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     if (sub.current) sub.current.remove();
     timer.current = null;
     sub.current = null;
+    const total = Number(fareRef.current.toFixed(2));
+    const body = {
+      trip_id: tripId.current,
+      tariff_type: isAirport(region) ? region : `${region}_${period}`,
+      total_fare: total,
+      trip_duration_seconds: secRef.current,
+      trip_distance_km: Number(distRef.current.toFixed(2)),
+    };
+    let sent = true;
     try {
-      await api("/drivers/roadside", {
-        method: "POST",
-        body: JSON.stringify({
-          driver_id: driverId || "ROADSIDE_DRIVER",
-          tariff_type: isAirport(region) ? region : `${region}_${period}`,
-          total_fare: Number(fareRef.current.toFixed(2)),
-          trip_duration_seconds: secRef.current,
-          trip_distance_km: Number(distRef.current.toFixed(2)),
-        }),
-      });
-      setSaved(`Trip of FJ$ ${fareRef.current.toFixed(2)} saved to admin.`);
+      await api("/drivers/roadside", { method: "POST", body });
     } catch {
-      setSaved("Could not send this trip to admin — check your connection.");
+      sent = false;
     }
+    tripId.current = null;
+    setLastTotal(total);
+    setSaved(sent ? "Trip total sent to admin." : "Could not send this trip to admin — check your connection.");
+    // Back to the starting rate for the next trip.
+    const base = getRate(region, period).base;
+    fareRef.current = base;
+    distRef.current = 0;
+    secRef.current = 0;
+    setFare(base);
+    setDistance(0);
+    setSeconds(0);
   }
 
   const rateNow = getRate(region, period);
@@ -220,6 +240,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         <Text style={styles.actionText}>{isRunning ? "END TRIP" : "START TRIP"}</Text>
       </TouchableOpacity>
 
+      {lastTotal !== null && !isRunning ? (
+        <View style={styles.totalCard}>
+          <Text style={styles.label}>Total fare for the trip just ended</Text>
+          <Text style={styles.totalVal}>FJ$ {lastTotal.toFixed(2)}</Text>
+        </View>
+      ) : null}
       {saved ? <Text style={styles.saved}>{saved}</Text> : null}
       <Text style={styles.note}>
         Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute waiting. Keep the app open while the meter runs.
@@ -251,6 +277,8 @@ const styles = StyleSheet.create({
   startBg: { backgroundColor: "#03dac6" },
   stopBg: { backgroundColor: "#cf6679" },
   actionText: { fontSize: 16, fontWeight: "bold", color: "#fff" },
+  totalCard: { backgroundColor: "#0f3d2a", padding: 16, borderRadius: 12, alignItems: "center", marginTop: 14 },
+  totalVal: { fontSize: 30, fontWeight: "bold", color: "#22CC66", marginTop: 4 },
   saved: { color: colors.green, textAlign: "center", marginTop: 12, fontSize: typography.small },
   note: { color: "#666", textAlign: "center", marginTop: 12, fontSize: 11 },
 });

@@ -535,6 +535,22 @@ function updateDriverInList(driver) {
   }
 }
 
+let roadsideSeen = null;
+function showRoadsideAlert(msg) {
+  let box = document.getElementById("roadside-alert");
+  if (!box) {
+    box = document.createElement("div");
+    box.id = "roadside-alert";
+    box.style.cssText = "position:fixed;top:12px;right:12px;z-index:9999;max-width:340px;display:flex;flex-direction:column;gap:8px";
+    document.body.appendChild(box);
+  }
+  const item = document.createElement("div");
+  item.style.cssText = "background:#fff3cd;color:#5c4400;border:2px solid #f0b400;border-radius:10px;padding:12px;font-weight:700;box-shadow:0 4px 12px rgba(0,0,0,.2)";
+  item.textContent = msg;
+  box.appendChild(item);
+  setTimeout(() => item.remove(), 15000);
+}
+
 async function loadRoadside() {
   const list = document.getElementById("roadside-list");
   if (!list || !adminToken) return;
@@ -543,9 +559,24 @@ async function loadRoadside() {
     if (!res.ok) return;
     const { trips } = await res.json();
     document.getElementById("roadside-count").textContent = `${trips.length} trips`;
+    const keys = trips.map(t => `${t.id}:${t.status}`);
+    if (roadsideSeen === null) {
+      roadsideSeen = new Set(keys);
+    } else {
+      trips.filter(t => !roadsideSeen.has(`${t.id}:${t.status}`)).forEach(t => {
+        const who = t.driver_name || "A driver";
+        const msg = t.status === "running"
+          ? `🚕 ${who} started a roadside trip (${t.tariff_type.replace(/_/g, " ")})`
+          : `🏁 ${who} ended a roadside trip — total FJ$ ${Number(t.total_fare).toFixed(2)}`;
+        showRoadsideAlert(msg);
+        beep();
+        try { if (window.Notification && Notification.permission === "granted") new Notification("Roadside meter", { body: msg }); } catch {}
+      });
+      roadsideSeen = new Set(keys);
+    }
     if (!trips.length) { list.innerHTML = `<p class="empty">No roadside trips yet.</p>`; return; }
-    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left"><th>When</th><th>Driver</th><th>Tariff</th><th>Distance</th><th>Time</th><th>Fare</th></tr>` +
-      trips.map(t => `<tr style="border-top:1px solid #ddd"><td>${escapeHtml(fmtFijiDateTime(parseDbUtc(t.created_at)))}</td><td>${escapeHtml(t.driver_name || "Driver")}<br><small>${escapeHtml(t.driver_phone || "")}</small></td><td>${escapeHtml(t.tariff_type)}</td><td>${Number(t.trip_distance_km).toFixed(2)} km</td><td>${Math.floor(t.trip_duration_seconds / 60)}m ${t.trip_duration_seconds % 60}s</td><td><b>FJ$ ${Number(t.total_fare).toFixed(2)}</b></td></tr>`).join("") + `</table>`;
+    list.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px"><tr style="text-align:left"><th>When</th><th>Driver</th><th>Tariff</th><th>Distance</th><th>Time</th><th>Fare</th><th>Status</th></tr>` +
+      trips.map(t => `<tr style="border-top:1px solid #ddd"><td>${escapeHtml(fmtFijiDateTime(parseDbUtc(t.created_at)))}</td><td>${escapeHtml(t.driver_name || "Driver")}<br><small>${escapeHtml(t.driver_phone || "")}</small></td><td>${escapeHtml(t.tariff_type)}</td><td>${Number(t.trip_distance_km).toFixed(2)} km</td><td>${Math.floor(t.trip_duration_seconds / 60)}m ${t.trip_duration_seconds % 60}s</td><td><b>${t.status === "running" ? "—" : "FJ$ " + Number(t.total_fare).toFixed(2)}</b></td><td>${t.status === "running" ? "🟢 Running" : "Finished"}</td></tr>`).join("") + `</table>`;
   } catch {}
 }
 

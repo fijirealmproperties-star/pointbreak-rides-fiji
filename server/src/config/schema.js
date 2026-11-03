@@ -106,6 +106,8 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'users', 'email_verified', 'INTEGER DEFAULT 0');
   ensureColumn(db, 'users', 'suspended_reason', 'TEXT');
   ensureColumn(db, 'users', 'suspended_at', 'TEXT');
+  ensureColumn(db, 'roadside_trips', 'status', "TEXT DEFAULT 'finished'");
+  ensureColumn(db, 'roadside_trips', 'ended_at', 'TEXT');
 }
 
 module.exports = { initSchema };

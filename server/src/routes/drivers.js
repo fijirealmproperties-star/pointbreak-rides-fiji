@@ -133,18 +133,42 @@ module.exports = (db, matchingEngine) => {
     res.json({ ok: true, lat, lng });
   });
 
+  router.post('/roadside/start', (req, res) => {
+    const { tariff_type } = req.body || {};
+    if (!/^[A-Z_a-z]{3,40}$/.test(String(tariff_type || ''))) return res.status(400).json({ error: 'Invalid tariff' });
+    const driver = driverFor(req.user.userId);
+    if (!driver) return res.status(404).json({ error: 'Driver record not found' });
+    if (activeRideFor(driver.id)) return res.status(409).json({ error: 'Finish your current ride first' });
+    db.prepare("UPDATE roadside_trips SET status='finished', ended_at=datetime('now') WHERE driver_id=? AND status='running'").run(driver.id);
+    const info = db.prepare("INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, status) VALUES (?, ?, 0, 'running')")
+      .run(driver.id, tariff_type);
+    db.prepare("UPDATE drivers SET status='offline' WHERE id=?").run(driver.id);
+    matchingEngine.unregisterDriverById(driver.id);
+    matchingEngine.broadcastDrivers();
+    res.json({ ok: true, trip_id: info.lastInsertRowid, status: 'offline' });
+  });
+
   router.post('/roadside', (req, res) => {
-    const { tariff_type, total_fare, trip_duration_seconds, trip_distance_km } = req.body || {};
+    const { trip_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km } = req.body || {};
     const fare = Number(total_fare);
     if (!/^[A-Z_a-z]{3,40}$/.test(String(tariff_type || '')) || !Number.isFinite(fare) || fare < 0 || fare > 100000) {
       return res.status(400).json({ error: 'Invalid roadside trip' });
     }
     const driver = driverFor(req.user.userId);
-    db.prepare('INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km) VALUES (?, ?, ?, ?, ?)')
-      .run(driver ? driver.id : req.user.userId, tariff_type, fare,
-        Math.max(0, Math.round(Number(trip_duration_seconds) || 0)), Math.max(0, Number(trip_distance_km) || 0));
+    const driverId = driver ? driver.id : req.user.userId;
+    const secs = Math.max(0, Math.round(Number(trip_duration_seconds) || 0));
+    const km = Math.max(0, Number(trip_distance_km) || 0);
+    const open = trip_id
+      ? db.prepare("SELECT id FROM roadside_trips WHERE id=? AND driver_id=? AND status='running'").get(trip_id, driverId)
+      : null;
+    if (open) {
+      db.prepare("UPDATE roadside_trips SET tariff_type=?, total_fare=?, trip_duration_seconds=?, trip_distance_km=?, status='finished', ended_at=datetime('now') WHERE id=?")
+        .run(tariff_type, fare, secs, km, open.id);
+    } else {
+      db.prepare("INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km, status, ended_at) VALUES (?, ?, ?, ?, ?, 'finished', datetime('now'))")
+        .run(driverId, tariff_type, fare, secs, km);
+    }
     res.json({ ok: true });
   });
-
   return router;
 };
