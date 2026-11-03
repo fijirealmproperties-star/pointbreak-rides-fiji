@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { colors, typography, fmtFare, fmtDate, statusLabel, statusColor } from "../theme";
+import { colors, typography, fmtFare, fmtDate, fmtTime, statusLabel, statusColor } from "../theme";
 import { api, Ride } from "../api";
 
 type Stats = {
@@ -128,7 +128,7 @@ export default function DriverTrips() {
           return (
             <View style={styles.card}>
               <View style={styles.cardHead}>
-                <Text style={styles.date}>{fmtDate(item.requested_at)}</Text>
+                <Text style={styles.date}>{fmtDate(item.requested_at)} · {fmtTime(item.requested_at)}</Text>
                 <View style={[styles.badge, { borderColor: sc }]}>
                   <Text style={[styles.badgeText, { color: sc }]}>{statusLabel(item.status)}</Text>
                 </View>

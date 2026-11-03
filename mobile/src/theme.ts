@@ -44,20 +44,25 @@ export function fmtDuration(min: number | null | undefined): string {
   return r ? `${h}h ${r}m` : `${h}h`;
 }
 
+// Server timestamps are UTC ("YYYY-MM-DD HH:MM:SS" without a zone); show them in the device's local time.
+export function parseServerDate(iso?: string | null): Date | null {
+  if (!iso) return null;
+  let s = String(iso).trim();
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(s)) s = s.replace(" ", "T");
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s) && !/(Z|[+-]\d{2}:?\d{2})$/.test(s)) s += "Z";
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
 export function fmtDate(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  const d = parseServerDate(iso);
+  return d ? d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "";
 }
 
 export function fmtTime(iso?: string | null): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "";
-  return d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  const d = parseServerDate(iso);
+  return d ? d.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" }) : "";
 }
-
 export function statusLabel(status: string): string {
   switch (status) {
     case "requested": return "Requested";
