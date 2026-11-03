@@ -123,7 +123,8 @@
     <a class="btn secondary" href="/?app=driver">Open driver app</a>
     <p class="ios">On iPhone, add Pointbreak to your Home Screen to use it like an app. This is not an App Store download.</p>
     <p class="android">Install Pointbreak on your Home Screen for quick access. It opens like an app and updates automatically.</p>
-    <button id="install" class="btn" hidden>Install app</button>
+    <button id="install" class="btn" type="button">Install app</button>
+    <p id="installMsg" class="hint" hidden></p>
     <div id="inapp" class="warn" hidden><b>Open in your phone browser first.</b> You are inside another app (Facebook, Messenger, Instagram, etc.), which cannot install apps. Tap <b>&#8942; / Share</b> and choose <b>Open in Chrome</b> (Android) or <b>Open in Safari</b> (iPhone), or <button id="copy" type="button">copy the link</button>.</div>
 
     <div class="android">
@@ -183,15 +184,19 @@
     window.addEventListener("beforeinstallprompt", function (e) {
       e.preventDefault();
       deferred = e;
-      installBtn.hidden = false;
     });
+    var installMsg = document.getElementById("installMsg");
     installBtn.addEventListener("click", function () {
-      if (!deferred) return;
-      deferred.prompt();
-      deferred.userChoice.then(function () {
-        deferred = null;
-        installBtn.hidden = true;
-      });
+      if (deferred) {
+        deferred.prompt();
+        deferred.userChoice.then(function () { deferred = null; });
+        return;
+      }
+      var ios = document.body.classList.contains("on-ios");
+      installMsg.textContent = ios
+        ? "Tap Share, then Add to Home Screen."
+        : "Tap the Chrome menu (three dots, top right), then Install app or Add to Home screen. If you only see Add shortcut, wait a few seconds, reload this page and try again. If it is already installed, open Pointbreak from your home screen.";
+      installMsg.hidden = false;
     });
     window.addEventListener("appinstalled", function () {
       installBtn.hidden = true;
