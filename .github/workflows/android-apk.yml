@@ -57,7 +57,7 @@ jobs:
           mkdir -p assets
           cp public/icons/icon-512.png assets/icon-only.png
           cp public/icons/icon-maskable-512.png assets/icon-foreground.png
-          sudo apt-get install -y -qq imagemagick
+          sudo apt-get update -qq && sudo apt-get install -y -qq imagemagick
           (command -v magick >/dev/null && magick -size 1024x1024 xc:'#02266E' assets/icon-background.png) || convert -size 1024x1024 xc:'#02266E' assets/icon-background.png
           npm install --no-save @capacitor/assets@3
           npx capacitor-assets generate --android --iconBackgroundColor '#02266E'
