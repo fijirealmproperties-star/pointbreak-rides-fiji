@@ -351,6 +351,10 @@ export default function DriverHome({ onOpenRide }: Props) {
               style={{ flex: 1 }}
               center={driverPosition}
               zoom={0.015}
+              onLocated={(p) => {
+                setDriverPosition(p);
+                if (online) api("/drivers/location", { method: "POST", body: { lat: p.lat, lng: p.lng } }).catch(() => {});
+              }}
               markers={[
                 { id: "me", lat: driverPosition.lat, lng: driverPosition.lng, color: status === "online" ? colors.green : colors.ocean, label: "You", icon: "🚗" },
               ]}

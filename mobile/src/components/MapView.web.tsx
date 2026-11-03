@@ -36,6 +36,7 @@ type Props = {
   onMapClick?: (p: MapPoint) => void;
   recenterToken?: number;
   locateBottom?: number;
+  onLocated?: (p: { lat: number; lng: number; accuracy: number }) => void;
 };
 
 type LayerBundle = {
@@ -257,6 +258,7 @@ export default function MapView({
   style,
   onMapClick,
   recenterToken,
+  onLocated,
   locateBottom = 12,
 }: Props) {
   const [domId] = useState(() => `pb-map-${++mapSeq}`);
@@ -313,29 +315,46 @@ export default function MapView({
   }, [payload, bundleRef.current]);
 
   const [locating, setLocating] = useState(false);
+  const onLocatedRef = useRef(onLocated);
+  onLocatedRef.current = onLocated;
   const meRef = useRef<L.Layer | null>(null);
 
+  // Sample GPS for a few seconds and keep the most accurate fix; a single
+  // reading is often a coarse network guess that jumps around.
   function locateMe() {
     const rt = bundleRef.current;
     if (!rt || !navigator.geolocation || locating) return;
     setLocating(true);
-    navigator.geolocation.getCurrentPosition(
+    let best: GeolocationCoordinates | null = null;
+    let done = false;
+    let watchId = 0;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      navigator.geolocation.clearWatch(watchId);
+      clearTimeout(timer);
+      setLocating(false);
+      if (!best) return;
+      const { latitude, longitude, accuracy } = best;
+      rt.userMoved = true;
+      rt.move(() => rt.map.setView([latitude, longitude], Math.max(rt.map.getZoom(), 16), { animate: true }));
+      if (meRef.current) rt.map.removeLayer(meRef.current);
+      meRef.current = L.layerGroup([
+        L.circle([latitude, longitude], { radius: Math.min(accuracy, 200), color: "#1E88E5", weight: 1, fillOpacity: 0.12 }),
+        L.circleMarker([latitude, longitude], { radius: 7, color: "#fff", weight: 2, fillColor: "#1E88E5", fillOpacity: 1 }),
+      ]).addTo(rt.map);
+      onLocatedRef.current?.({ lat: latitude, lng: longitude, accuracy });
+    };
+    const timer = setTimeout(finish, 6000);
+    watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setLocating(false);
-        const { latitude, longitude, accuracy } = pos.coords;
-        rt.userMoved = true;
-        rt.move(() => rt.map.setView([latitude, longitude], Math.max(rt.map.getZoom(), 16), { animate: true }));
-        if (meRef.current) rt.map.removeLayer(meRef.current);
-        meRef.current = L.layerGroup([
-          L.circle([latitude, longitude], { radius: Math.min(accuracy, 200), color: "#1E88E5", weight: 1, fillOpacity: 0.12 }),
-          L.circleMarker([latitude, longitude], { radius: 7, color: "#fff", weight: 2, fillColor: "#1E88E5", fillOpacity: 1 }),
-        ]).addTo(rt.map);
+        if (!best || pos.coords.accuracy < best.accuracy) best = pos.coords;
+        if (best.accuracy <= 20) finish();
       },
-      () => setLocating(false),
+      () => finish(),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
   }
-
   return (
     <View style={[styles.container, style]}>
       <View nativeID={domId} style={StyleSheet.absoluteFill} />

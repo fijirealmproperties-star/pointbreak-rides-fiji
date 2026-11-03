@@ -32,6 +32,7 @@ type Props = {
   style?: ViewStyle;
   onMapClick?: (p: MapPoint) => void;
   recenterToken?: number;
+  onLocated?: (p: { lat: number; lng: number; accuracy: number }) => void;
   locateBottom?: number;
 };
 
