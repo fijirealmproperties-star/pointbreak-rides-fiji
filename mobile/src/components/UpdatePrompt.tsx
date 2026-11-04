@@ -1,13 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { colors, typography } from "../theme";
-
-function currentBuild(): string | null {
-  if (typeof document === "undefined") return null;
-  const el = document.querySelector('meta[name="pb-build"]');
-  const v = el?.getAttribute("content");
-  return v && v !== "__PB_BUILD__" ? v : null;
-}
+import { applyUpdate, useUpdateAvailable } from "../updateState";
 
 const APK_URL = "https://github.com/fijirealmproperties-star/pointbreak-rides-fiji/releases/download/apk-latest/pointbreak.apk";
 
@@ -25,60 +19,22 @@ function needsNewApk(): boolean {
 export default function UpdatePrompt() {
   const [apkOld] = useState(needsNewApk);
   const [apkLater, setApkLater] = useState(false);
-  const [available, setAvailable] = useState<string | null>(null);
-  const [dismissed, setDismissed] = useState<string | null>(null);
+  const available = useUpdateAvailable();
+  const [snoozeUntil, setSnoozeUntil] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [, tick] = useState(0);
 
-  const check = useCallback(async () => {
-    const mine = currentBuild();
-    if (!mine) return;
-    let latest: string | null = null;
-    try {
-      const res = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
-      const txt = await res.text();
-      const m = txt.match(/"build"\s*:\s*"([a-f0-9]+)"/);
-      if (m) latest = m[1];
-    } catch {}
-    if (!latest) {
-      try {
-        const res = await fetch(`/?t=${Date.now()}`, { cache: "no-store" });
-        const m = (await res.text()).match(/name="pb-build"\s+content="([a-f0-9]+)"/);
-        if (m) latest = m[1];
-      } catch {}
-    }
-    if (!latest || latest === mine) return;
-    // Already updated to this build (the page was just refreshed): stay quiet.
-    try { if (localStorage.getItem("pb-updated-to") === latest) return; } catch {}
-    setAvailable(latest);
-  }, []);
+  // "Later" only snoozes: the reminder returns until the app is updated.
   useEffect(() => {
-    if (Platform.OS !== "web") return;
-    check();
-    const onVisible = () => {
-      if (document.visibilityState === "visible") check();
-    };
-    document.addEventListener("visibilitychange", onVisible);
-    window.addEventListener("focus", check);
-    const timer = setInterval(check, 20000);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      window.removeEventListener("focus", check);
-      clearInterval(timer);
-    };
-  }, [check]);
+    if (!available) return;
+    const t = setInterval(() => tick((n) => n + 1), 15000);
+    return () => clearInterval(t);
+  }, [available]);
 
   async function update() {
     setBusy(true);
-    try {
-      const regs = await navigator.serviceWorker?.getRegistrations();
-      await Promise.all((regs || []).map((r) => r.unregister()));
-      const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-    } catch {}
-    try { if (available) localStorage.setItem("pb-updated-to", available); } catch {}
-    window.location.replace("/?v=" + Date.now());
+    await applyUpdate();
   }
-
   if (Platform.OS !== "web") return null;
 
   if (apkOld && !apkLater) {
@@ -101,7 +57,7 @@ export default function UpdatePrompt() {
   }
 
   return (
-    <Modal visible={!!available && dismissed !== available} transparent animationType="fade" onRequestClose={() => setDismissed(available)}>
+    <Modal visible={!!available && Date.now() >= snoozeUntil} transparent animationType="fade" onRequestClose={() => setSnoozeUntil(Date.now() + 5 * 60 * 1000)}>
       <View style={styles.backdrop}>
         <View style={styles.box}>
           <Text style={styles.title}>Update available</Text>
@@ -109,7 +65,7 @@ export default function UpdatePrompt() {
           <TouchableOpacity style={styles.primary} onPress={update} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Updating…" : "Update"}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.later} onPress={() => setDismissed(available)} disabled={busy}>
+          <TouchableOpacity style={styles.later} onPress={() => setSnoozeUntil(Date.now() + 5 * 60 * 1000)} disabled={busy}>
             <Text style={styles.laterText}>Later</Text>
           </TouchableOpacity>
         </View>
