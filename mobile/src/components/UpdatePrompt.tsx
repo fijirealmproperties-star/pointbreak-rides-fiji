@@ -9,7 +9,18 @@ function currentBuild(): string | null {
   return v && v !== "__PB_BUILD__" ? v : null;
 }
 
+const APK_URL = "https://github.com/fijirealmproperties-star/pointbreak-rides-fiji/releases/download/apk-latest/pointbreak.apk";
+
+// An installed APK that predates the native GPS plugin needs one reinstall.
+function needsNewApk(): boolean {
+  const cap = (globalThis as any).Capacitor;
+  if (!cap?.isNativePlatform?.()) return false;
+  try { return !cap.isPluginAvailable("BackgroundGeolocation"); } catch { return false; }
+}
+
 export default function UpdatePrompt() {
+  const [apkOld] = useState(needsNewApk);
+  const [apkLater, setApkLater] = useState(false);
   const [available, setAvailable] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -53,6 +64,25 @@ export default function UpdatePrompt() {
   }
 
   if (Platform.OS !== "web") return null;
+
+  if (apkOld && !apkLater) {
+    return (
+      <Modal visible transparent animationType="fade" onRequestClose={() => setApkLater(true)}>
+        <View style={styles.backdrop}>
+          <View style={styles.box}>
+            <Text style={styles.title}>New app version</Text>
+            <Text style={styles.msg}>A new Pointbreak app with accurate background GPS is ready. Tap Download, open the file when it finishes, and choose Install.</Text>
+            <TouchableOpacity style={styles.primary} onPress={() => { window.location.href = APK_URL; }}>
+              <Text style={styles.primaryText}>Download</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.later} onPress={() => setApkLater(true)}>
+              <Text style={styles.laterText}>Later</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    );
+  }
 
   return (
     <Modal visible={!!available && dismissed !== available} transparent animationType="fade" onRequestClose={() => setDismissed(available)}>
