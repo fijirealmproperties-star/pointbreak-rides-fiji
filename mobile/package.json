@@ -1,6 +1,6 @@
 {
   "name": "pointbreak-rides-fiji-mobile",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "Pointbreak Rides Fiji — Ride-hailing for Fiji",
   "private": true,
   "main": "index.ts",

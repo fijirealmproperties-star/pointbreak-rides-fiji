@@ -43,7 +43,7 @@ jobs:
       - name: Create Android project
         working-directory: mobile
         run: |
-          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 @capacitor-community/background-geolocation@1
+          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 @capacitor-community/background-geolocation@1 @capacitor/local-notifications@6
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "fj.pointbreak.rides",
