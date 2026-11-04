@@ -94,6 +94,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const lastTick = useRef(0);
   const startAt = useRef(0);
   const tickFn = useRef<() => void>(() => {});
+  const nativeFailed = useRef(false);
+  const fixCount = useRef(0);
 
   useEffect(
     () => () => {
@@ -138,6 +140,15 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
 
   async function startMeter() {
     if (runningRef.current) return;
+    try {
+      const perm = await Location.requestForegroundPermissionsAsync();
+      if (perm.status !== "granted") {
+        Alert.alert("Location needed", "Allow location access for Pointbreak so the meter can measure distance from your phone's GPS.");
+        return;
+      }
+    } catch {}
+    nativeFailed.current = false;
+    fixCount.current = 0;
     regionRef.current = region;
     periodRef.current = period;
     const rates = getRate(region, period);
@@ -198,6 +209,11 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       }
       if (tr.speedKmh <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
       setGps(tr.state);
+      // Native GPS gave nothing: switch to the phone's standard location service.
+      if (fixCount.current === 0 && !nativeFailed.current && nativeGpsAvailable() && now - startAt.current > 10000 && secRef.current >= 10) {
+        nativeFailed.current = true;
+        startWatch(charge);
+      }
       // Restart a stalled GPS only while moving; a quiet GPS at a red light is normal.
       if (tr.lastMovingKmh > 10 && tr.silentFor(now) > 12000 && now - lastRestart.current > 12000) {
         lastRestart.current = now;
@@ -216,15 +232,18 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     const old = sub.current;
     sub.current = null;
     try { old?.remove(); } catch {}
-    if (nativeGpsAvailable()) {
+    if (nativeGpsAvailable() && !nativeFailed.current) {
       try {
         const stop = await startNativeWatch(
           (f) => {
             if (!runningRef.current) return;
+            fixCount.current += 1;
             charge(tr.ingest({ lat: f.latitude, lng: f.longitude, accuracy: f.accuracy, speed: f.speed, t: f.time || Date.now() }));
             setGps(tr.state);
           },
-          () => {}
+          () => {
+            if (fixCount.current === 0 && !nativeFailed.current) { nativeFailed.current = true; startWatch(charge); }
+          }
         );
         if (runningRef.current) sub.current = { remove: stop } as any;
         else stop();
@@ -237,6 +256,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
       (loc) => {
         if (!runningRef.current) return;
+        fixCount.current += 1;
         const c = loc.coords;
         charge(
           tr.ingest({
