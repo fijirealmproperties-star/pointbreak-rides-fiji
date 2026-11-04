@@ -92,6 +92,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const regionRef = useRef<Region>("VITI_LEVU");
   const periodRef = useRef<Period>(autoPeriod());
   const lastTick = useRef(0);
+  const startAt = useRef(0);
+  const tickFn = useRef<() => void>(() => {});
 
   useEffect(
     () => () => {
@@ -117,7 +119,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   // The screen lock is dropped when the page is hidden; take it again on return.
   useEffect(() => {
     if (!isRunning || typeof document === "undefined") return;
-    const onVis = () => { if (document.visibilityState === "visible") holdWake(); };
+    const onVis = () => { if (document.visibilityState === "visible") { holdWake(); tickFn.current(); } };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [isRunning]);
@@ -169,6 +171,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     tr.reset();
     setGps("searching");
     lastTick.current = Date.now();
+    // Elapsed time always comes from the wall clock, so it can never stall at a stop.
+    startAt.current = Date.now() - secRef.current * 1000;
 
     const charge = (km: number) => {
       if (km <= 0) return;
@@ -178,12 +182,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     };
 
     // Use real elapsed time so throttled timers don't under-count the trip.
-    timer.current = setInterval(() => {
+    const tickBody = () => {
       if (!runningRef.current) return;
       const now = Date.now();
       const dt = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
-      secRef.current += dt;
+      secRef.current = (now - startAt.current) / 1000;
       setSeconds(Math.floor(secRef.current));
       // Weak signal: keep estimating distance from the last good speed.
       const est = tr.tick(now);
@@ -194,13 +198,15 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       }
       if (tr.speedKmh <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
       setGps(tr.state);
-      // Some phones silently stall the GPS in weak areas: restart it.
-      if (tr.silentFor(now) > 12000 && now - lastRestart.current > 12000) {
+      // Restart a stalled GPS only while moving; a quiet GPS at a red light is normal.
+      if (tr.lastMovingKmh > 10 && tr.silentFor(now) > 12000 && now - lastRestart.current > 12000) {
         lastRestart.current = now;
         startWatch(charge);
       }
       persist();
-    }, 1000);
+    };
+    tickFn.current = tickBody;
+    timer.current = setInterval(tickBody, 1000);
 
     await startWatch(charge);
   }

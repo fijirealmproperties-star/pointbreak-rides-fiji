@@ -24,7 +24,7 @@ export class TripTracker {
 
   private anchor: { lat: number; lng: number; t: number } | null = null;
   private lastGoodAt = 0;
-  private lastMovingKmh = 0;
+  lastMovingKmh = 0;
   private coastedKm = 0;
   private lastTickAt = 0;
   private rejected = 0;
@@ -80,8 +80,8 @@ export class TripTracker {
     const still = reportedMs == null || reportedMs < 1;
     if (still && dKm * 1000 < noiseM * 1.5) {
       // Standing still: drift inside the error radius is not travel.
-      this.speedKmh = this.speedKmh * 0.5;
-      if (this.speedKmh < 1) this.speedKmh = 0;
+      this.speedKmh = 0;
+      this.lastMovingKmh = 0;
       return 0;
     }
 
