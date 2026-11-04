@@ -45,7 +45,7 @@ function getRate(region: Region, period: Period): Rate {
 const isAirport = (r: Region) => r === "NADI_AIRPORT" || r === "OTHER_AIRPORT";
 
 // Below this speed the meter charges waiting time; above it, distance.
-const WAIT_SPEED_KMH = 15;
+const WAIT_SPEED_KMH = 6;
 
 function autoPeriod(): Period {
   const h = new Date().getHours();
@@ -174,7 +174,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       if (km <= 0) return;
       distRef.current += km;
       setDistance(distRef.current);
-      if (tr.speedKmh > WAIT_SPEED_KMH) addFare(km * rates.perKm);
+      addFare(km * rates.perKm);
     };
 
     // Use real elapsed time so throttled timers don't under-count the trip.
@@ -190,7 +190,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       if (est > 0) {
         distRef.current += est;
         setDistance(distRef.current);
-        if (tr.speedKmh > WAIT_SPEED_KMH) addFare(est * rates.perKm);
+        addFare(est * rates.perKm);
       }
       if (tr.speedKmh <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
       setGps(tr.state);
@@ -411,7 +411,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       ) : null}
       {saved ? <Text style={styles.saved}>{saved}</Text> : null}
       <Text style={styles.note}>
-        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute waiting. The screen stays awake and GPS keeps running while the meter runs. Your car is hidden from riders. Do not close the app during a trip.
+        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute while stopped or crawling. The screen stays awake and GPS keeps running while the meter runs. Your car is hidden from riders. Do not close the app during a trip.
       </Text>
     </View>
   );

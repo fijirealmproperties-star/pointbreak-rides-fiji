@@ -85,7 +85,10 @@ export class TripTracker {
       return 0;
     }
 
-    const add = Math.max(0, dKm - this.coastedKm);
+    // Doppler speed from the GPS chip is steadier than position jitter: blend the two.
+    let stepKm = dKm;
+    if (reportedMs != null && reportedMs >= 2 && dtS <= 5) stepKm = 0.5 * dKm + 0.5 * ((reportedMs * dtS) / 1000);
+    const add = Math.max(0, stepKm - this.coastedKm);
     this.coastedKm = 0;
     this.anchor = { lat: fix.lat, lng: fix.lng, t: fix.t };
     this.speedKmh = this.speedKmh === 0 ? ms * 3.6 : this.speedKmh * 0.4 + ms * 3.6 * 0.6;
