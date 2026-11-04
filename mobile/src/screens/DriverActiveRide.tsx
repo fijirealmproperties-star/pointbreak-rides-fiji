@@ -358,7 +358,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
             <Text style={styles.completeEmoji}>🌊</Text>
             <Text style={styles.completeTitle}>Trip complete!</Text>
             <Text style={styles.completeSub}>
-              {ride.pickup_place} → {ride.dropoff_place}
+              {ride.pickup_place} → {ride.dropoff_place} · 👥 {ride.passengers || 1}
             </Text>
             <View style={styles.summaryRow}>
               <View style={styles.summaryCard}>

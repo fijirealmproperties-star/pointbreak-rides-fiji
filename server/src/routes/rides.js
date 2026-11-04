@@ -90,6 +90,7 @@ module.exports = (db, io, matchingEngine) => {
       }
 
       const est = await estimateFor(db, pickup, dropoff);
+      const passengers = Math.min(15, Math.max(1, Math.floor(Number(body.passengers)) || 1));
       const id = uuidv4();
       const pickupCode = String(Math.floor(1000 + Math.random() * 9000));
 
@@ -106,7 +107,7 @@ module.exports = (db, io, matchingEngine) => {
         scheduledAt = new Date(t).toISOString().slice(0, 19).replace('T', ' ');
       }
 
-      db.prepare('INSERT INTO rides (id, rider_id, pickup_place, dropoff_place, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, fare, currency, status, distance_km, duration_min, path_json, pickup_code, quoted_fare, meter_distance_km, meter_fare, scheduled_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+      db.prepare('INSERT INTO rides (id, rider_id, pickup_place, dropoff_place, pickup_lat, pickup_lng, dropoff_lat, dropoff_lng, fare, currency, status, distance_km, duration_min, path_json, pickup_code, quoted_fare, meter_distance_km, meter_fare, scheduled_at, passengers) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
         .run(
           id,
           req.user.userId,
@@ -126,7 +127,8 @@ module.exports = (db, io, matchingEngine) => {
           est.fare,
           0,
           0,
-          scheduledAt
+          scheduledAt,
+          passengers
         );
 
       const ride = loadRide(db, id);

@@ -58,6 +58,7 @@ export interface Ride {
   duration_min: number;
   path_json?: string | Array<{ lat: number; lng: number }> | null;
   pickup_code?: string | null;
+  passengers?: number | null;
   quoted_fare?: number | null;
   meter_distance_km?: number | null;
   meter_fare?: number | null;

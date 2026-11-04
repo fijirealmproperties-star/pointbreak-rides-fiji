@@ -504,6 +504,7 @@ export default function DriverHome({ onOpenRide }: Props) {
                   </Text>
                   <Text style={styles.requestFare}>{fmtFare(requestRide.fare)}</Text>
                 </View>
+                <Text style={styles.metaText}>👥 {requestRide.passengers || 1} passenger{(requestRide.passengers || 1) > 1 ? "s" : ""}</Text>
                 <View style={styles.requestBtns}>
                   <TouchableOpacity style={[styles.requestBtn, styles.declineBtn]} onPress={decline}>
                     <Text style={styles.declineText}>Decline</Text>

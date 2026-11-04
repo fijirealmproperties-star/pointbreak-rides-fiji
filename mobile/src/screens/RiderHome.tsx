@@ -64,6 +64,7 @@ export default function RiderHome({ onOpenRide }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState("");
   const [bookLater, setBookLater] = useState(false);
+  const [passengers, setPassengers] = useState(1);
   const [schedDate, setSchedDate] = useState("");
   const [schedTime, setSchedTime] = useState("");
   const [bookedMsg, setBookedMsg] = useState("");
@@ -400,6 +401,7 @@ export default function RiderHome({ onOpenRide }: Props) {
           dropoff_lng: dropoff.lng,
           dropoff_name: dropoff.name,
           scheduled_at: scheduledIso,
+          passengers,
         },
       });
       if (scheduledIso) {
@@ -686,6 +688,15 @@ export default function RiderHome({ onOpenRide }: Props) {
                     </Text>
                   </>
                 ) : null}
+
+                <Text style={styles.paxLabel}>👥 Passengers</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.paxRow}>
+                  {Array.from({ length: 15 }, (_, i) => i + 1).map((n) => (
+                    <TouchableOpacity key={n} style={[styles.paxChip, passengers === n && styles.paxChipOn]} onPress={() => setPassengers(n)}>
+                      <Text style={[styles.paxText, passengers === n && styles.paxTextOn]}>{n}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
 
                 {error ? <Text style={styles.error}>{error}</Text> : null}
 
@@ -1034,6 +1045,12 @@ const styles = StyleSheet.create({
   },
 
   /* ---- Road badge ---- */
+  paxLabel: { color: colors.textMuted, fontSize: typography.small, fontWeight: "700", marginTop: 10, marginBottom: 6 },
+  paxRow: { flexGrow: 0, marginBottom: 10 },
+  paxChip: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: colors.border, alignItems: "center", justifyContent: "center", marginRight: 8 },
+  paxChipOn: { backgroundColor: colors.sunset, borderColor: colors.sunset },
+  paxText: { color: colors.text, fontWeight: "800" },
+  paxTextOn: { color: "#14100c" },
   roadBadge: {
     fontSize: 11,
     color: "#888",

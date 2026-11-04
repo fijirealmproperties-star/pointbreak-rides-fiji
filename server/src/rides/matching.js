@@ -335,7 +335,7 @@ class MatchingEngine {
       const fare = ride.fare != null ? ` · FJ$${Number(ride.fare).toFixed(2)}` : '';
       sendPush(this.db, d.user_id, {
         title: '🚗 New ride request!',
-        body: `${ride.pickup_place || 'Pickup'} → ${ride.dropoff_place || 'Dropoff'}${fare}`,
+        body: `👥 ${ride.passengers || 1} · ${ride.pickup_place || 'Pickup'} → ${ride.dropoff_place || 'Dropoff'}${fare}`,
         tag: `ride-${ride.id}`,
         rideId: ride.id,
       }).catch(() => {});

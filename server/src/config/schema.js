@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS rides (
 
   // --- Taxi meter + rider verification (added after the initial schema) ---
   ensureColumn(db, 'rides', 'pickup_code', 'TEXT');
+  ensureColumn(db, 'rides', 'passengers', 'INTEGER DEFAULT 1');
   ensureColumn(db, 'rides', 'quoted_fare', 'REAL');
   ensureColumn(db, 'rides', 'meter_distance_km', 'REAL DEFAULT 0');
   ensureColumn(db, 'rides', 'meter_fare', 'REAL DEFAULT 0');
