@@ -43,7 +43,7 @@ jobs:
       - name: Create Android project
         working-directory: mobile
         run: |
-          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3
+          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 @capacitor-community/background-geolocation@1
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "fj.pointbreak.rides",
@@ -62,7 +62,7 @@ jobs:
           npx capacitor-assets generate --android --iconBackgroundColor '#02266E'
           npx cap sync android
           M=android/app/src/main/AndroidManifest.xml
-          sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.POST_NOTIFICATIONS" /><application#' "$M"
+          sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.POST_NOTIFICATIONS" /><uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /><uses-permission android:name="android.permission.FOREGROUND_SERVICE" /><uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" /><uses-permission android:name="android.permission.WAKE_LOCK" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application#' "$M"
           sed -i 's#<application#<application android:usesCleartextTraffic="false"#' "$M"
 
       - name: Build APK

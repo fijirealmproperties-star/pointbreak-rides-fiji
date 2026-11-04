@@ -4,9 +4,11 @@ import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
 import { TripTracker, GpsState } from "../gpsFilter";
+import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
 import { colors, typography } from "../theme";
 
 const TRIP_KEY = "pb-active-trip";
+const PENDING_KEY = "pb-pending-trips";
 
 // Fiji FCCC regulated rates.
 const FIJI_TARIFFS = {
@@ -208,6 +210,23 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     const old = sub.current;
     sub.current = null;
     try { old?.remove(); } catch {}
+    if (nativeGpsAvailable()) {
+      try {
+        const stop = await startNativeWatch(
+          (f) => {
+            if (!runningRef.current) return;
+            charge(tr.ingest({ lat: f.latitude, lng: f.longitude, accuracy: f.accuracy, speed: f.speed, t: f.time || Date.now() }));
+            setGps(tr.state);
+          },
+          () => {}
+        );
+        if (runningRef.current) sub.current = { remove: stop } as any;
+        else stop();
+        return;
+      } catch {
+        // fall through to the browser GPS
+      }
+    }
     const subscription = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
       (loc) => {
@@ -297,9 +316,37 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setSeconds(0);
     // Saving happens in the background so End Trip responds instantly.
     startReq.current.then(async (id) => {
-      try { await api("/drivers/roadside", { method: "POST", body: { ...snapshot, trip_id: snapshot.trip_id ?? id, tariff_type: tariff } }); } catch {}
+      const body2 = { ...snapshot, trip_id: snapshot.trip_id ?? id, tariff_type: tariff };
+      try { await api("/drivers/roadside", { method: "POST", body: body2 }); }
+      catch { await queueTrip(body2); }
     });
   }
+  // Trips finished without a signal are kept on the phone and sent when data returns.
+  async function queueTrip(b: any) {
+    try {
+      const list = JSON.parse((await AsyncStorage.getItem(PENDING_KEY)) || "[]");
+      list.push(b);
+      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(list));
+    } catch {}
+  }
+  async function flushTrips() {
+    try {
+      const list = JSON.parse((await AsyncStorage.getItem(PENDING_KEY)) || "[]");
+      if (!list.length) return;
+      const left: any[] = [];
+      for (const b of list) {
+        try { await api("/drivers/roadside", { method: "POST", body: b }); } catch { left.push(b); }
+      }
+      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(left));
+    } catch {}
+  }
+  useEffect(() => {
+    flushTrips();
+    const iv = setInterval(flushTrips, 30000);
+    const on = () => flushTrips();
+    (globalThis as any).addEventListener?.("online", on);
+    return () => { clearInterval(iv); (globalThis as any).removeEventListener?.("online", on); };
+  }, []);
   const rateNow = getRate(region, period);
   return (
     <View style={styles.container}>
