@@ -116,10 +116,11 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [isRunning]);
 
+  // Only refs change on each GPS fix or tick; the screen redraws once a second.
   function addFare(amount: number) {
     fareRef.current += amount;
-    setFare(fareRef.current);
   }
+  const tickCount = useRef(0);
 
   function pick(nextRegion: Region, nextPeriod: Period) {
     setRegion(nextRegion);
@@ -167,9 +168,11 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       const dt = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
       secRef.current += dt;
-      setSeconds(Math.floor(secRef.current));
       if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
-      persist();
+      setSeconds(Math.floor(secRef.current));
+      setFare(fareRef.current);
+      setDistance(distRef.current);
+      if (++tickCount.current % 5 === 0) persist();
     }, 1000);
 
     const subscription = await Location.watchPositionAsync(
@@ -179,18 +182,23 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         const { latitude, longitude, speed } = loc.coords;
         const now = Date.now();
         const prev = last.current;
+        const acc = loc.coords.accuracy;
+        if (acc != null && acc > 50) return;
         if (prev) {
-          const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
           const dt = (now - prev.t) / 1000;
-          // Browsers often report no speed, so derive it from movement.
-          const kmh = speed != null && speed >= 0 ? speed * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
-          speedRef.current = kmh;
-          const acc = loc.coords.accuracy;
-            if (acc != null && acc > 50) { return; }
-            if (dKm > Math.max(0.003, ((acc ?? 0) / 1000) * 0.5)) {
-            distRef.current += dKm;
-            setDistance(distRef.current);
-            addFare(dKm * rates.perKm);
+          const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
+          const hasSpeed = speed != null && speed >= 0;
+          // Prefer the chip's Doppler speed: it is not affected by GPS jitter.
+          const kmh = hasSpeed ? speed * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
+          if (kmh < 200 && dt > 0 && dt < 30) {
+            speedRef.current = kmh;
+            let add = 0;
+            if (hasSpeed && speed > 0.8) add = (speed * dt) / 1000;
+            else if (!hasSpeed && dKm > Math.max(0.003, ((acc ?? 0) / 1000) * 0.5)) add = dKm;
+            if (add > 0) {
+              distRef.current += add;
+              addFare(add * rates.perKm);
+            }
           }
         }
         last.current = { lat: latitude, lng: longitude, t: now };
