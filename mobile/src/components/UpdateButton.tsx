@@ -15,7 +15,7 @@ export default function UpdateButton() {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     } catch {}
-    window.location.reload();
+    window.location.replace("/?v=" + Date.now());
   }
 
   return (

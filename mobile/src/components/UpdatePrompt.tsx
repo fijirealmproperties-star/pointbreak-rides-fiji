@@ -32,14 +32,25 @@ export default function UpdatePrompt() {
   const check = useCallback(async () => {
     const mine = currentBuild();
     if (!mine) return;
+    let latest: string | null = null;
     try {
       const res = await fetch(`/version.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) return;
-      const data = await res.json();
-      if (data && typeof data.build === "string" && data.build !== mine) setAvailable(data.build);
+      const txt = await res.text();
+      const m = txt.match(/"build"\s*:\s*"([a-f0-9]+)"/);
+      if (m) latest = m[1];
     } catch {}
+    if (!latest) {
+      try {
+        const res = await fetch(`/?t=${Date.now()}`, { cache: "no-store" });
+        const m = (await res.text()).match(/name="pb-build"\s+content="([a-f0-9]+)"/);
+        if (m) latest = m[1];
+      } catch {}
+    }
+    if (!latest || latest === mine) return;
+    // Already updated to this build (the page was just refreshed): stay quiet.
+    try { if (localStorage.getItem("pb-updated-to") === latest) return; } catch {}
+    setAvailable(latest);
   }, []);
-
   useEffect(() => {
     if (Platform.OS !== "web") return;
     check();
@@ -64,7 +75,8 @@ export default function UpdatePrompt() {
       const keys = await caches.keys();
       await Promise.all(keys.map((k) => caches.delete(k)));
     } catch {}
-    window.location.reload();
+    try { if (available) localStorage.setItem("pb-updated-to", available); } catch {}
+    window.location.replace("/?v=" + Date.now());
   }
 
   if (Platform.OS !== "web") return null;
