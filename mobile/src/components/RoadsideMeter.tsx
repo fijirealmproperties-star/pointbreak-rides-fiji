@@ -3,12 +3,9 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
-import { TripTracker, GpsState } from "../gpsFilter";
-import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
 import { colors, typography } from "../theme";
 
 const TRIP_KEY = "pb-active-trip";
-const PENDING_KEY = "pb-pending-trips";
 
 // Fiji FCCC regulated rates.
 const FIJI_TARIFFS = {
@@ -45,7 +42,7 @@ function getRate(region: Region, period: Period): Rate {
 const isAirport = (r: Region) => r === "NADI_AIRPORT" || r === "OTHER_AIRPORT";
 
 // Below this speed the meter charges waiting time; above it, distance.
-const WAIT_SPEED_KMH = 6;
+const WAIT_SPEED_KMH = 15;
 
 function autoPeriod(): Period {
   const h = new Date().getHours();
@@ -85,17 +82,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const tripId = useRef<number | null>(null);
   const wakeLock = useRef<any>(null);
   const runningRef = useRef(false);
-  const tracker = useRef(new TripTracker());
-  const lastRestart = useRef(0);
-  const [gps, setGps] = useState<GpsState>("searching");
   const startReq = useRef<Promise<number | null>>(Promise.resolve(null));
   const regionRef = useRef<Region>("VITI_LEVU");
   const periodRef = useRef<Period>(autoPeriod());
   const lastTick = useRef(0);
-  const startAt = useRef(0);
-  const tickFn = useRef<() => void>(() => {});
-  const nativeFailed = useRef(false);
-  const fixCount = useRef(0);
 
   useEffect(
     () => () => {
@@ -121,7 +111,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   // The screen lock is dropped when the page is hidden; take it again on return.
   useEffect(() => {
     if (!isRunning || typeof document === "undefined") return;
-    const onVis = () => { if (document.visibilityState === "visible") { holdWake(); tickFn.current(); } };
+    const onVis = () => { if (document.visibilityState === "visible") holdWake(); };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [isRunning]);
@@ -140,15 +130,6 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
 
   async function startMeter() {
     if (runningRef.current) return;
-    try {
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== "granted") {
-        Alert.alert("Location needed", "Allow location access for Pointbreak so the meter can measure distance from your phone's GPS.");
-        return;
-      }
-    } catch {}
-    nativeFailed.current = false;
-    fixCount.current = 0;
     regionRef.current = region;
     periodRef.current = period;
     const rates = getRate(region, period);
@@ -178,101 +159,47 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   async function runLoop(rates: Rate) {
     runningRef.current = true;
     holdWake();
-    const tr = tracker.current;
-    tr.reset();
-    setGps("searching");
     lastTick.current = Date.now();
-    // Elapsed time always comes from the wall clock, so it can never stall at a stop.
-    startAt.current = Date.now() - secRef.current * 1000;
-
-    const charge = (km: number) => {
-      if (km <= 0) return;
-      distRef.current += km;
-      setDistance(distRef.current);
-      addFare(km * rates.perKm);
-    };
-
     // Use real elapsed time so throttled timers don't under-count the trip.
-    const tickBody = () => {
+    timer.current = setInterval(() => {
       if (!runningRef.current) return;
       const now = Date.now();
       const dt = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
-      secRef.current = (now - startAt.current) / 1000;
+      secRef.current += dt;
       setSeconds(Math.floor(secRef.current));
-      // Weak signal: keep estimating distance from the last good speed.
-      const est = tr.tick(now);
-      if (est > 0) {
-        distRef.current += est;
-        setDistance(distRef.current);
-        addFare(est * rates.perKm);
-      }
-      if (tr.speedKmh <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
-      setGps(tr.state);
-      // Native GPS gave nothing: switch to the phone's standard location service.
-      if (fixCount.current === 0 && !nativeFailed.current && nativeGpsAvailable() && now - startAt.current > 10000 && secRef.current >= 10) {
-        nativeFailed.current = true;
-        startWatch(charge);
-      }
-      // Restart a stalled GPS only while moving; a quiet GPS at a red light is normal.
-      if (tr.lastMovingKmh > 10 && tr.silentFor(now) > 12000 && now - lastRestart.current > 12000) {
-        lastRestart.current = now;
-        startWatch(charge);
-      }
+      if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
       persist();
-    };
-    tickFn.current = tickBody;
-    timer.current = setInterval(tickBody, 1000);
+    }, 1000);
 
-    await startWatch(charge);
-  }
-
-  async function startWatch(charge: (km: number) => void) {
-    const tr = tracker.current;
-    const old = sub.current;
-    sub.current = null;
-    try { old?.remove(); } catch {}
-    if (nativeGpsAvailable() && !nativeFailed.current) {
-      try {
-        const stop = await startNativeWatch(
-          (f) => {
-            if (!runningRef.current) return;
-            fixCount.current += 1;
-            charge(tr.ingest({ lat: f.latitude, lng: f.longitude, accuracy: f.accuracy, speed: f.speed, t: f.time || Date.now() }));
-            setGps(tr.state);
-          },
-          () => {
-            if (fixCount.current === 0 && !nativeFailed.current) { nativeFailed.current = true; startWatch(charge); }
-          }
-        );
-        if (runningRef.current) sub.current = { remove: stop } as any;
-        else stop();
-        return;
-      } catch {
-        // fall through to the browser GPS
-      }
-    }
     const subscription = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
       (loc) => {
         if (!runningRef.current) return;
-        fixCount.current += 1;
-        const c = loc.coords;
-        charge(
-          tr.ingest({
-            lat: c.latitude,
-            lng: c.longitude,
-            accuracy: c.accuracy,
-            speed: c.speed,
-            t: loc.timestamp || Date.now(),
-          })
-        );
-        setGps(tr.state);
+        const { latitude, longitude, speed } = loc.coords;
+        const now = Date.now();
+        const prev = last.current;
+        if (prev) {
+          const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
+          const dt = (now - prev.t) / 1000;
+          // Browsers often report no speed, so derive it from movement.
+          const kmh = speed != null && speed >= 0 ? speed * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
+          speedRef.current = kmh;
+          const acc = loc.coords.accuracy;
+            if (acc != null && acc > 50) { return; }
+            if (dKm > Math.max(0.003, ((acc ?? 0) / 1000) * 0.5)) {
+            distRef.current += dKm;
+            setDistance(distRef.current);
+            addFare(dKm * rates.perKm);
+          }
+        }
+        last.current = { lat: latitude, lng: longitude, t: now };
       }
     );
     if (runningRef.current) sub.current = subscription;
     else subscription.remove();
   }
+
   function persist() {
     if (!runningRef.current) return;
     AsyncStorage.setItem(
@@ -342,37 +269,9 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     setSeconds(0);
     // Saving happens in the background so End Trip responds instantly.
     startReq.current.then(async (id) => {
-      const body2 = { ...snapshot, trip_id: snapshot.trip_id ?? id, tariff_type: tariff };
-      try { await api("/drivers/roadside", { method: "POST", body: body2 }); }
-      catch { await queueTrip(body2); }
+      try { await api("/drivers/roadside", { method: "POST", body: { ...snapshot, trip_id: snapshot.trip_id ?? id, tariff_type: tariff } }); } catch {}
     });
   }
-  // Trips finished without a signal are kept on the phone and sent when data returns.
-  async function queueTrip(b: any) {
-    try {
-      const list = JSON.parse((await AsyncStorage.getItem(PENDING_KEY)) || "[]");
-      list.push(b);
-      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(list));
-    } catch {}
-  }
-  async function flushTrips() {
-    try {
-      const list = JSON.parse((await AsyncStorage.getItem(PENDING_KEY)) || "[]");
-      if (!list.length) return;
-      const left: any[] = [];
-      for (const b of list) {
-        try { await api("/drivers/roadside", { method: "POST", body: b }); } catch { left.push(b); }
-      }
-      await AsyncStorage.setItem(PENDING_KEY, JSON.stringify(left));
-    } catch {}
-  }
-  useEffect(() => {
-    flushTrips();
-    const iv = setInterval(flushTrips, 30000);
-    const on = () => flushTrips();
-    (globalThis as any).addEventListener?.("online", on);
-    return () => { clearInterval(iv); (globalThis as any).removeEventListener?.("online", on); };
-  }, []);
   const rateNow = getRate(region, period);
   return (
     <View style={styles.container}>
@@ -409,8 +308,6 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         <Text style={styles.label}>Running total</Text>
       </View>
 
-
-
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>
           <Text style={styles.statVal}>{distance.toFixed(2)}</Text>
@@ -437,7 +334,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       ) : null}
       {saved ? <Text style={styles.saved}>{saved}</Text> : null}
       <Text style={styles.note}>
-        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute while stopped or crawling. The screen stays awake and GPS keeps running while the meter runs. Your car is hidden from riders. Do not close the app during a trip.
+        Starts at FJ${rateNow.base.toFixed(2)}, then FJ${rateNow.perKm.toFixed(2)} per km and FJ$0.18 per minute waiting. The screen stays awake and GPS keeps running while the meter runs. Your car is hidden from riders. Do not close the app during a trip.
       </Text>
     </View>
   );
@@ -461,9 +358,6 @@ const styles = StyleSheet.create({
   label: { fontSize: 11, color: "#888", textTransform: "uppercase", marginTop: 4 },
   statsContainer: { flexDirection: "row", backgroundColor: "#181818", padding: 15, borderRadius: 10, marginBottom: 20 },
   statBox: { flex: 1, alignItems: "center" },
-  gpsLine: { textAlign: "center", fontSize: 13, fontWeight: "700", marginBottom: 8 },
-  gpsGood: { color: "#22CC66" },
-  gpsWeak: { color: "#E8A820" },
   statVal: { fontSize: 18, fontWeight: "bold", color: "#fff" },
   actionButton: { padding: 16, borderRadius: 12, alignItems: "center" },
   startBg: { backgroundColor: "#03dac6" },
