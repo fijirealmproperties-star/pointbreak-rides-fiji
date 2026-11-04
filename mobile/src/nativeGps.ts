@@ -27,8 +27,8 @@ export async function startNativeWatch(
   const p = getPlugin();
   const id: string = await p.addWatcher(
     {
-      backgroundTitle: "Pointbreak meter is running",
-      backgroundMessage: "Measuring your trip with GPS",
+      backgroundTitle: "Pointbreak is using your location",
+      backgroundMessage: "Keeping your position accurate",
       requestPermissions: true,
       stale: false,
       distanceFilter: 0,

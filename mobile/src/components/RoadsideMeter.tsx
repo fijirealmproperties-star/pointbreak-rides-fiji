@@ -383,11 +383,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         <Text style={styles.label}>Running total</Text>
       </View>
 
-      {isRunning ? (
-        <Text style={[styles.gpsLine, gps === "good" ? styles.gpsGood : styles.gpsWeak]}>
-          {gps === "good" ? "📡 GPS strong" : gps === "weak" ? "⚠️ GPS signal weak — estimating distance until it returns" : "🛰 Searching for GPS…"}
-        </Text>
-      ) : null}
+
 
       <View style={styles.statsContainer}>
         <View style={styles.statBox}>

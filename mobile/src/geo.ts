@@ -1,3 +1,4 @@
+import { nativeGpsAvailable, startNativeWatch } from "./nativeGps";
 import * as Location from "expo-location";
 
 const R = 6371;
@@ -65,18 +66,39 @@ export function watchCurrentLocation(
   onError?: (error: Error) => void,
   maximumAccuracy = 250
 ): () => void {
-  // Ignore GPS jitter: small moves inside the error radius while slow are noise.
+  // Smooth the marker: follow every fix, but blend it with the last one so it
+  // glides instead of freezing and jumping, and drop impossible teleports.
   let last: CurrentLocation | null = null;
+  let lastAt = 0;
+  let bad = 0;
   const onPosition = (p: CurrentLocation) => {
+    const now = Date.now();
     if (last) {
       const moved = haversine(last.lat, last.lng, p.lat, p.lng) * 1000;
-      const slow = p.speed == null || p.speed < 1.5;
-      const noise = Math.max(last.accuracy, p.accuracy, 15);
-      if (slow && moved < noise) return;
+      const dt = Math.max(0.5, (now - lastAt) / 1000);
+      if (moved / dt > 70 && bad < 3) { bad++; return; }
+      bad = 0;
+      const still = p.speed != null && p.speed < 0.8;
+      if (still && moved < Math.max(p.accuracy, 6)) return;
+      const a = still ? 0.25 : Math.min(1, Math.max(0.55, 20 / Math.max(p.accuracy, 5)));
+      p = { ...p, lat: last.lat + (p.lat - last.lat) * a, lng: last.lng + (p.lng - last.lng) * a };
     }
     last = p;
+    lastAt = now;
     emitPosition(p);
   };
+  if (nativeGpsAvailable()) {
+    let active = true;
+    let stop: (() => void) | null = null;
+    startNativeWatch(
+      (f) => {
+        if (!active || !(f.accuracy > 0) || f.accuracy > maximumAccuracy) return;
+        onPosition({ lat: f.latitude, lng: f.longitude, accuracy: f.accuracy, speed: f.speed });
+      },
+      () => {}
+    ).then((s) => { if (active) stop = s; else s(); }).catch(() => {});
+    return () => { active = false; stop?.(); };
+  }
   if (hasBrowserGeolocation()) {
     let active = true;
     let lastFixAt = Date.now();
