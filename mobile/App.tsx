@@ -32,6 +32,7 @@ import DriverMeter from "./src/screens/DriverMeter";
 import NoticeBell from "./src/components/NoticeBell";
 import ShareAppCard from "./src/components/ShareAppCard";
 import UpdatePrompt from "./src/components/UpdatePrompt";
+import UpdateButton from "./src/components/UpdateButton";
 import NotificationPrompt from "./src/components/NotificationPrompt";
 
 type TabKey = "home" | "trips" | "meter" | "profile";
@@ -126,10 +127,12 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
 
       <ShareAppCard />
 
+      <UpdateButton />
+
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 2.8</Text>
+      <Text style={styles.surfTag}>Version 2.8.1</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
