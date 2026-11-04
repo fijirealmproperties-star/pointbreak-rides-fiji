@@ -9,7 +9,7 @@ export type RawFix = {
   t: number; // ms
 };
 
-const MAX_ACCURACY_M = 40; // fixes worse than this are ignored
+const MAX_ACCURACY_M = 50; // fixes worse than this are ignored
 const MAX_SPEED_MS = 70; // ~250 km/h: anything faster is a GPS jump
 const COAST_AFTER_MS = 2500; // no good fix for this long: assume we are in a weak area
 const COAST_MAX_MS = 25000; // keep estimating for this long, then stop
@@ -76,19 +76,22 @@ export class TripTracker {
 
     const reportedMs = fix.speed != null && Number.isFinite(fix.speed) && fix.speed >= 0 ? fix.speed : null;
     const ms = reportedMs ?? impliedMs;
-    const noiseM = Math.max(acc, 8);
-    const still = reportedMs == null || reportedMs < 1;
-    if (still && dKm * 1000 < noiseM * 1.5) {
-      // Standing still: drift inside the error radius is not travel.
-      this.speedKmh = 0;
-      this.lastMovingKmh = 0;
-      return 0;
-    }
-
-    // Doppler speed from the GPS chip is steadier than position jitter: blend the two.
     let stepKm = dKm;
-    if (reportedMs != null && reportedMs >= 2 && dtS <= 5) stepKm = 0.5 * dKm + 0.5 * ((reportedMs * dtS) / 1000);
-    const add = Math.max(0, stepKm - this.coastedKm);
+    if (reportedMs != null) {
+      if (reportedMs < 0.8) {
+        // Chip says we are not moving: re-anchor so drift never builds up.
+        this.anchor = { lat: fix.lat, lng: fix.lng, t: fix.t };
+        this.speedKmh = 0;
+        this.lastMovingKmh = 0;
+        return 0;
+      }
+      // Doppler speed is the most accurate source of distance; position only sanity-checks it.
+      const dopKm = (reportedMs * Math.min(dtS, 10)) / 1000;
+      stepKm = dKm > 0 && dKm < dopKm * 2 && dKm > dopKm * 0.5 ? 0.75 * dopKm + 0.25 * dKm : dtS <= 10 ? dopKm : dKm;
+    } else {
+      const noiseM = Math.max(acc, 8);
+      if (dKm * 1000 < noiseM * 1.5) return 0;
+    }    const add = Math.max(0, stepKm - this.coastedKm);
     this.coastedKm = 0;
     this.anchor = { lat: fix.lat, lng: fix.lng, t: fix.t };
     this.speedKmh = this.speedKmh === 0 ? ms * 3.6 : this.speedKmh * 0.4 + ms * 3.6 * 0.6;
