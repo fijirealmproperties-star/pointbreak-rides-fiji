@@ -1,5 +1,20 @@
 const webpush = require('web-push');
 
+let fcm = null;
+function initFcm() {
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+  if (!raw) return;
+  try {
+    const admin = require('firebase-admin');
+    const cred = JSON.parse(raw.trim().startsWith('{') ? raw : Buffer.from(raw, 'base64').toString('utf8'));
+    admin.initializeApp({ credential: admin.credential.cert(cred) });
+    fcm = admin.messaging();
+    console.log('FCM push ready');
+  } catch (e) {
+    console.error('FCM init failed:', e && e.message);
+  }
+}
+
 let ready = false;
 let publicKey = null;
 
@@ -12,6 +27,11 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
   sub_json TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS fcm_tokens (
+  token TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE IF NOT EXISTS notices (
@@ -47,6 +67,7 @@ CREATE TABLE IF NOT EXISTS notice_reads (
   webpush.setVapidDetails(process.env.VAPID_SUBJECT || 'mailto:admin@pointbreakfiji.com', pub, priv);
   publicKey = pub;
   ready = true;
+  initFcm();
 }
 
 const getPublicKey = () => publicKey;
@@ -60,14 +81,38 @@ function removeSubscription(db, endpoint) {
   db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint);
 }
 
+function saveFcmToken(db, userId, token) {
+  db.prepare('INSERT OR REPLACE INTO fcm_tokens (token, user_id) VALUES (?, ?)').run(token, userId);
+}
+
 function hasSubscription(db, userId) {
-  return !!db.prepare('SELECT 1 AS x FROM push_subscriptions WHERE user_id=? LIMIT 1').get(userId);
+  return !!db.prepare('SELECT 1 AS x FROM push_subscriptions WHERE user_id=? LIMIT 1').get(userId)
+    || !!db.prepare('SELECT 1 AS x FROM fcm_tokens WHERE user_id=? LIMIT 1').get(userId);
 }
 
 async function sendPush(db, userId, payload) {
   if (!ready || !userId) return 0;
   const rows = db.prepare('SELECT endpoint, sub_json FROM push_subscriptions WHERE user_id=?').all(userId);
   let sent = 0;
+  if (fcm) {
+    const tokens = db.prepare('SELECT token FROM fcm_tokens WHERE user_id=?').all(userId);
+    await Promise.all(tokens.map(async (t) => {
+      try {
+        await fcm.send({
+          token: t.token,
+          notification: { title: String(payload.title || 'Pointbreak'), body: String(payload.body || '') },
+          data: { tag: String(payload.tag || '') },
+          android: { priority: 'high', ttl: 60000, notification: { tag: payload.tag || undefined, channelId: 'default' } },
+        });
+        sent += 1;
+      } catch (e) {
+        const code = e && e.code;
+        if (code === 'messaging/registration-token-not-registered' || code === 'messaging/invalid-registration-token') {
+          db.prepare('DELETE FROM fcm_tokens WHERE token=?').run(t.token);
+        } else console.error('FCM failed:', e && e.message);
+      }
+    }));
+  }
   await Promise.all(rows.map(async (row) => {
     try {
       await webpush.sendNotification(JSON.parse(row.sub_json), JSON.stringify(payload), {
@@ -83,4 +128,4 @@ async function sendPush(db, userId, payload) {
   return sent;
 }
 
-module.exports = { initPush, getPublicKey, saveSubscription, removeSubscription, hasSubscription, sendPush };
+module.exports = { saveFcmToken, initPush, getPublicKey, saveSubscription, removeSubscription, hasSubscription, sendPush };

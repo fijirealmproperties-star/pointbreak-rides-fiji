@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "258684472456",
+    "project_id": "fijirealms",
+    "storage_bucket": "fijirealms.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:258684472456:android:4f0ab81117d39fb1eea33d",
+        "android_client_info": {
+          "package_name": "fj.pointbreak.rides"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbUQ49IeaK9xeqVExwJpn2a2ttSi2qZyg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

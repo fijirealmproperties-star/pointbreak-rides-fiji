@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { api, getUser } from "../api";
 import { enablePush, pushSupported } from "../push";
+import { nativePushAvailable, registerNativePush } from "../nativePush";
 import { colors, typography } from "../theme";
 
 const isWeb = Platform.OS === "web" && typeof window !== "undefined";
@@ -57,7 +58,8 @@ export default function NotificationPrompt() {
     if (s === "ask") setShow(true);
     else if (s === "granted") {
       setShow(false);
-      if (pushSupported()) enablePush().catch(() => {});
+      if (nativePushAvailable()) registerNativePush();
+      else if (pushSupported()) enablePush().catch(() => {});
     }
   }, []);
 
@@ -93,7 +95,7 @@ export default function NotificationPrompt() {
     const n = nativeNotifs();
     if (n) {
       const p = await n.requestPermissions().catch(() => null);
-      if (p?.display === "granted") setShow(false);
+      if (p?.display === "granted") { setShow(false); registerNativePush(); }
       else setMsg("Notifications are blocked. Open phone Settings > Apps > Pointbreak > Notifications and turn them on.");
     } else {
       const r = await enablePush();

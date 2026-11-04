@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
-const { getPublicKey, saveSubscription, removeSubscription, sendPush } = require('../push');
+const { saveFcmToken, getPublicKey, saveSubscription, removeSubscription, sendPush } = require('../push');
 
 module.exports = (db) => {
   const router = express.Router();
@@ -15,6 +15,15 @@ module.exports = (db) => {
       return res.status(400).json({ error: 'Invalid subscription' });
     }
     saveSubscription(db, req.user.userId, sub);
+    res.json({ ok: true });
+  });
+
+  router.post('/fcm', requireAuth, (req, res) => {
+    const token = req.body && req.body.token;
+    if (typeof token !== 'string' || token.length < 20 || token.length > 4096) {
+      return res.status(400).json({ error: 'Invalid token' });
+    }
+    saveFcmToken(db, req.user.userId, token);
     res.json({ ok: true });
   });
 

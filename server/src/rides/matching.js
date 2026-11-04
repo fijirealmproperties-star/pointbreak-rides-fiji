@@ -269,7 +269,8 @@ class MatchingEngine {
     const rows = this.db.prepare(
       `SELECT d.id, d.lat, d.lng FROM drivers d
        WHERE d.status='online'
-         AND EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = d.user_id)`
+         AND (EXISTS (SELECT 1 FROM push_subscriptions p WHERE p.user_id = d.user_id)
+              OR EXISTS (SELECT 1 FROM fcm_tokens f WHERE f.user_id = d.user_id))`
     ).all();
     let away = null;
     for (const row of rows) {
