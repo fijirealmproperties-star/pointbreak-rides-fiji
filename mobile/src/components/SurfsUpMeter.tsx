@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as Location from "expo-location";
 import { api } from "../api";
-import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
+import { startMeterGps } from "../meterGps";
 import { colors, typography } from "../theme";
 
 // FCCC Fiji taxi interim rates.
@@ -216,28 +216,12 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     // Real elapsed time keeps waiting charges right even if timers are throttled.
     if (timer.current) clearInterval(timer.current);
     timer.current = setInterval(tick, 1000);
-    try {
-      if (nativeGpsAvailable()) {
-        // Android foreground service: keeps measuring with the screen off or the app in the background.
-        const stop = await startNativeWatch(
-          (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
-          (code) => { if (code === "NOT_AUTHORIZED") setNote("Location needed: allow location access (Always) so the meter keeps measuring in the background."); }
-        );
-        if (runningRef.current) sub.current = stop;
-        else stop();
-        return;
-      }
-      const perm = await Location.requestForegroundPermissionsAsync();
-      if (perm.status !== "granted") throw new Error("denied");
-      const s = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
-        (loc) => onFix({ ...loc.coords, time: loc.timestamp })
-      );
-      if (runningRef.current) sub.current = () => s.remove();
-      else s.remove();
-    } catch {
-      setNote("Location needed: allow location access in the browser or phone settings so the meter can measure distance.");
-    }
+    const stopGps = startMeterGps(
+      (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
+      () => setNote("Location needed: allow location access (Always) so the meter keeps measuring.")
+    );
+    if (runningRef.current) sub.current = stopGps;
+    else stopGps();
   }
 
   function endTrip() {

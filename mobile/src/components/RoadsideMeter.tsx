@@ -3,7 +3,8 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
-import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
+import { nativeGpsAvailable } from "../nativeGps";
+import { startMeterGps } from "../meterGps";
 import { colors, typography } from "../theme";
 
 const TRIP_KEY = "pb-active-trip";
@@ -221,22 +222,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     };
     lastFixAt.current = 0;
     rawAt.current = 0;
-    if (nativeGpsAvailable()) {
-      // Android foreground service: keeps measuring with the screen off or the app in the background.
-      const stop = await startNativeWatch(
-        (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
-        (code) => { if (code === "NOT_AUTHORIZED") setSaved("Location needed: allow location access (Always) so the meter keeps measuring in the background."); }
-      );
-      if (runningRef.current) sub.current = stop;
-      else stop();
-      return;
-    }
-    const subscription = await Location.watchPositionAsync(
-      { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
-      (loc) => onFix({ ...loc.coords, time: loc.timestamp })
+    const stopGps = startMeterGps(
+      (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
+      () => setSaved("Location needed: allow location access (Always) so the meter keeps measuring.")
     );
-    if (runningRef.current) sub.current = () => subscription.remove();
-    else subscription.remove();
+    if (runningRef.current) sub.current = stopGps;
+    else stopGps();
   }
 
   function persist() {
