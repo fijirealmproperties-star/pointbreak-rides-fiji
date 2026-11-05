@@ -282,7 +282,7 @@ export default function LoginScreen({ onLogin }: Props) {
           {mode === "login" || mode === "register" || mode === "reset" ? (
             <View style={{ position: "relative", justifyContent: "center" }}>
               <TextInput
-                style={[styles.input, { paddingRight: 52 }]}
+                style={[styles.input, Platform.OS === "web" ? null : { paddingRight: 52 }]}
                 placeholder={mode === "reset" ? "New password (min 8 characters)" : "Password"}
                 placeholderTextColor={colors.textMuted}
                 value={password}
@@ -294,13 +294,13 @@ export default function LoginScreen({ onLogin }: Props) {
                 textContentType={mode === "login" ? "password" : "newPassword"}
                 importantForAutofill="yes"
               />
-              <TouchableOpacity
+              {Platform.OS === "web" ? null : <TouchableOpacity
                 onPress={() => setShowPw((v) => !v)}
                 accessibilityLabel={showPw ? "Hide password" : "Show password"}
                 style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 48, alignItems: "center", justifyContent: "center" }}
               >
                 <Text style={{ fontSize: 20 }}>{showPw ? "🙈" : "👁️"}</Text>
-              </TouchableOpacity>
+              </TouchableOpacity>}
             </View>
           ) : null}
           {mode === "login" ? (
