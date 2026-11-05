@@ -86,8 +86,12 @@
       <span class="register-status" id="admin-status"></span>
     </div>
     <div id="admin-auth" class="admin-auth">
-      <input id="adm-phone" class="reg-input" placeholder="Admin phone (e.g. +679…)" autocomplete="off" />
-      <input id="adm-password" class="reg-input" type="password" placeholder="Admin password" autocomplete="off" />
+      <input id="adm-phone" class="reg-input" name="username" placeholder="Admin phone (e.g. +679…)" autocomplete="username" />
+      <span class="pw-wrap">
+        <input id="adm-password" class="reg-input" name="password" type="password" placeholder="Admin password" autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()" />
+        <button type="button" class="pw-eye" id="adm-eye" aria-label="Show password" onclick="toggleAdminPw()">👁️</button>
+      </span>
+      <label class="keep-me"><input type="checkbox" id="adm-keep" checked /> Keep me logged in</label>
       <button class="reg-btn" onclick="adminLogin()">Sign in</button>
       <span class="admin-hint">Use the admin account created during setup (ADMIN_PHONE / ADMIN_PASSWORD).</span>
     </div>

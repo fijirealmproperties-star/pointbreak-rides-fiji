@@ -7,6 +7,10 @@ let assigningRideId = null;
 let rides = [];
 let drivers = [];
 let liveRiders = [];
+// "Keep me logged in" unticked: the admin sign-in only lasts for this browser session.
+if (localStorage.getItem('pb_admin_keep') === '0' && !sessionStorage.getItem('pb_admin_sess')) {
+  ['pb_admin_token', 'pb_admin_refresh', 'pb_admin_user'].forEach((k) => localStorage.removeItem(k));
+}
 let adminToken = localStorage.getItem('pb_admin_token') || null;
 let adminUserName = localStorage.getItem('pb_admin_user') || null;
 
@@ -95,6 +99,9 @@ async function adminLogin() {
     localStorage.setItem('pb_admin_token', adminToken);
     if (data.refreshToken) localStorage.setItem('pb_admin_refresh', data.refreshToken);
     localStorage.setItem('pb_admin_user', adminUserName);
+    const keepBox = document.getElementById('adm-keep');
+    localStorage.setItem('pb_admin_keep', keepBox && !keepBox.checked ? '0' : '1');
+    sessionStorage.setItem('pb_admin_sess', '1');
     renderAdminState();
     loadCounts();
     document.getElementById('adm-phone').value = '';
@@ -103,6 +110,15 @@ async function adminLogin() {
     status.textContent = 'Could not reach the server';
     status.className = 'register-status error';
   }
+}
+
+function toggleAdminPw() {
+  const input = document.getElementById('adm-password');
+  const eye = document.getElementById('adm-eye');
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  eye.textContent = show ? '🙈' : '👁️';
+  eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
 }
 
 function adminLogout() {
