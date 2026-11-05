@@ -128,6 +128,9 @@ module.exports = (db, matchingEngine) => {
     const driver = driverFor(req.user.userId);
     if (!driver) return res.status(404).json({ error: 'Driver record not found' });
 
+    // A driver running a roadside trip stays hidden from riders and admin.
+    const onRoadside = db.prepare("SELECT 1 FROM roadside_trips WHERE driver_id=? AND status='running' AND created_at >= datetime('now','-6 hours')").get(driver.id);
+    if (onRoadside) return res.json({ ok: true, hidden: true });
     matchingEngine.updateLocation(driver.id, lat, lng);
     db.prepare('UPDATE drivers SET lat=?, lng=? WHERE id=?').run(lat, lng, driver.id);
     res.json({ ok: true, lat, lng });
