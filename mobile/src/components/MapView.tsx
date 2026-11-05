@@ -139,7 +139,7 @@ function applyState(s) {
     if (s.vehicle) bounds.extend([s.vehicle.lat, s.vehicle.lng]);
   }
 
-  function sv(i){var ok=['🚗','🚕','🚙','🛻','🚐','🚌','🚘'];return '<div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">' + (ok.indexOf(i)>=0?i:'🚗') + '</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div>';}
+  function sv(i){var ok=['🚗','🚕','🚙','🛻','🚐','🚌','🚘'];return '<div style="font-size:28px;line-height:32px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))">' + (ok.indexOf(i)>=0?i:'🚗') + '</div>';}
 (s.markers || []).forEach(function (m) {
     var c = m.color || "#0066CC";
     var emo = "font-size:28px;line-height:32px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))";

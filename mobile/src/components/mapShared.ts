@@ -92,9 +92,7 @@ const LABEL_STYLE =
 export const VEHICLE_ICONS = ["🚗", "🚕", "🚙", "🛻", "🚐", "🚌", "🚘"];
 
 export const surfVehicleHtml = (icon?: string) =>
-  '<div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">' +
-  (icon && VEHICLE_ICONS.indexOf(icon) >= 0 ? icon : "🚗") +
-  '</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div>';
+  '<div style="'+EMOJI_STYLE+'">' + (icon && VEHICLE_ICONS.indexOf(icon) >= 0 ? icon : "🚗") + "</div>";
 
 export const markerPinHtml = (color: string, label?: string, icon?: string) =>
   icon
