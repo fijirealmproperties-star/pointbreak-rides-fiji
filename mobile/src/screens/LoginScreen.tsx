@@ -13,6 +13,55 @@ import { colors, typography } from "../theme";
 import { api, setAuth, clearAuth, setKeepSignedIn, User } from "../api";
 import { isDriverApp, setDriverMode, DEMO_RIDER, DEMO_DRIVER, DEMO_ENABLED } from "../appMode";
 
+type Doc = { type: string; mime: string; data: string; name: string };
+const DOC_LABELS: Record<string, string> = { national_id: "National ID", tin: "TIN ID", voters_card: "Voter's card" };
+
+function pickFile(camera: boolean): Promise<File | null> {
+  return new Promise((resolve) => {
+    const el = document.createElement("input");
+    el.type = "file";
+    el.accept = camera ? "image/*" : "image/*,application/pdf";
+    if (camera) el.setAttribute("capture", "environment");
+    el.onchange = () => resolve((el.files && el.files[0]) || null);
+    el.click();
+  });
+}
+
+function readAsDataUrl(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(new Error("Could not read the file"));
+    r.readAsDataURL(file);
+  });
+}
+
+// Shrinks photos so uploads stay small and fast on mobile data.
+async function toDocument(file: File, type: string): Promise<Doc> {
+  if (file.type === "application/pdf") {
+    if (file.size > 3 * 1024 * 1024) throw new Error("PDF is too large (max 3 MB)");
+    return { type, mime: file.type, data: await readAsDataUrl(file), name: file.name };
+  }
+  if (!file.type.startsWith("image/")) throw new Error("Choose a photo or a PDF");
+  const url = URL.createObjectURL(file);
+  try {
+    const img: HTMLImageElement = await new Promise((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = () => rej(new Error("Could not open that image"));
+      i.src = url;
+    });
+    const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.width * scale);
+    c.height = Math.round(img.height * scale);
+    c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+    return { type, mime: "image/jpeg", data: c.toDataURL("image/jpeg", 0.8), name: file.name || "photo.jpg" };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 type Props = {
   onLogin: (user: User) => void;
 };
@@ -31,6 +80,21 @@ export default function LoginScreen({ onLogin }: Props) {
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [keep, setKeep] = useState(true);
+  const [docType, setDocType] = useState("national_id");
+  const [docs, setDocs] = useState<Doc[]>([]);
+
+  async function addDoc(camera: boolean) {
+    setError("");
+    try {
+      const f = await pickFile(camera);
+      if (!f) return;
+      if (docs.length >= 3) throw new Error("You can upload up to 3 documents");
+      const d = await toDocument(f, docType);
+      setDocs((x) => [...x, d]);
+    } catch (e: any) {
+      setError(e.message || "Could not add document");
+    }
+  }
 
   function chooseRole(nextDriver: boolean) {
     setDriverAppState(nextDriver);
@@ -87,9 +151,13 @@ export default function LoginScreen({ onLogin }: Props) {
         return;
       }
       if (mode === "register" && !override) {
+        if (Platform.OS === "web" && docs.length === 0) {
+          setError("Please add a photo of your ID, TIN ID or voter's card.");
+          return;
+        }
         const r = await api<{ needsVerification?: boolean }>("/auth/register", {
           method: "POST",
-          body: { name, phone, email, password },
+          body: { name, phone, email, password, documents: docs.map(({ type, mime, data }) => ({ type, mime, data })) },
         });
         if (r.needsVerification) {
           setMode("verify");
@@ -301,6 +369,38 @@ export default function LoginScreen({ onLogin }: Props) {
               >
                 <Text style={{ fontSize: 20 }}>{showPw ? "🙈" : "👁️"}</Text>
               </TouchableOpacity>}
+            </View>
+          ) : null}
+          {mode === "register" && !driverApp && Platform.OS === "web" ? (
+            <View style={{ marginBottom: 12 }}>
+              <Text style={styles.roleLabel}>ID verification (sent securely to admin)</Text>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", marginBottom: 8 }}>
+                {Object.keys(DOC_LABELS).map((k) => (
+                  <TouchableOpacity
+                    key={k}
+                    onPress={() => setDocType(k)}
+                    style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.textMuted, marginRight: 6, marginBottom: 6, backgroundColor: docType === k ? colors.ocean : "transparent" }}
+                  >
+                    <Text style={{ color: docType === k ? "#fff" : colors.textMuted, fontWeight: "700" }}>{DOC_LABELS[k]}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <View style={{ flexDirection: "row" }}>
+                <TouchableOpacity style={[styles.btn, { flex: 1, marginRight: 6 }]} onPress={() => addDoc(true)}>
+                  <Text style={styles.btnText}>📷 Take photo</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.btn, { flex: 1 }]} onPress={() => addDoc(false)}>
+                  <Text style={styles.btnText}>📁 Upload file</Text>
+                </TouchableOpacity>
+              </View>
+              {docs.map((d, i) => (
+                <View key={i} style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
+                  <Text style={{ color: colors.text, flex: 1 }}>✅ {DOC_LABELS[d.type]} · {d.name}</Text>
+                  <TouchableOpacity onPress={() => setDocs((x) => x.filter((_, j) => j !== i))}>
+                    <Text style={{ color: colors.coral, fontWeight: "800" }}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </View>
           ) : null}
           {mode === "login" ? (

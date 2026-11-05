@@ -153,6 +153,7 @@ module.exports = (db, matchingEngine) => {
       SELECT u.id, u.name, u.phone, u.email, u.email_verified, u.role, u.created_at, u.suspended, u.suspended_reason,
              d.id AS driver_id, d.vehicle_type, d.vehicle_model, d.license_plate, d.status AS driver_status,
              d.rating AS driver_rating, d.trips AS driver_trips,
+             (SELECT COUNT(*) FROM user_documents x WHERE x.user_id = u.id) AS doc_count,
              (SELECT COUNT(*) FROM rides r WHERE r.rider_id = u.id) AS rides_as_rider,
              (SELECT COUNT(*) FROM rides r WHERE r.rider_id = u.id AND r.status = 'cancelled') AS cancelled_rides,
              (SELECT COUNT(*) FROM rides r WHERE d.id IS NOT NULL AND r.driver_id = d.id) AS rides_as_driver,
@@ -163,6 +164,20 @@ module.exports = (db, matchingEngine) => {
       ORDER BY u.created_at DESC
     `).all();
     res.json({ users });
+  });
+
+  // ID documents uploaded at sign-up (metadata list, then the file itself).
+  router.get('/users/:id/documents', (req, res) => {
+    const docs = db.prepare('SELECT id, doc_type, mime, size, created_at FROM user_documents WHERE user_id=? ORDER BY created_at').all(req.params.id);
+    res.json({ documents: docs });
+  });
+
+  router.get('/documents/:id', (req, res) => {
+    const d = db.prepare('SELECT mime, data FROM user_documents WHERE id=?').get(req.params.id);
+    if (!d) return res.status(404).json({ error: 'Document not found' });
+    res.set('Content-Type', d.mime);
+    res.set('Cache-Control', 'private, no-store');
+    res.send(Buffer.from(d.data, 'base64'));
   });
 
   router.get('/users/:id', (req, res) => {
@@ -262,6 +277,7 @@ module.exports = (db, matchingEngine) => {
     db.prepare('DELETE FROM push_subscriptions WHERE user_id=?').run(user.id);
     db.prepare('DELETE FROM notice_reads WHERE user_id=?').run(user.id);
     db.prepare('DELETE FROM email_codes WHERE user_id=?').run(user.id);
+    db.prepare('DELETE FROM user_documents WHERE user_id=?').run(user.id);
     if (driver) db.prepare('DELETE FROM drivers WHERE id=?').run(driver.id);
     db.prepare('DELETE FROM users WHERE id=?').run(user.id);
     res.json({ ok: true });

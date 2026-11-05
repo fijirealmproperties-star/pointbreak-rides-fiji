@@ -8,6 +8,32 @@ const { sendPush } = require('../push');
 
 const router = express.Router();
 
+const DOC_TYPES = ['national_id', 'tin', 'voters_card', 'passport', 'drivers_licence'];
+const DOC_MIMES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_DOC_BYTES = 3.5 * 1024 * 1024;
+
+// Returns { docs } with validated documents, or { error }.
+function parseDocuments(input) {
+  if (!Array.isArray(input) || input.length === 0) return { error: 'Upload at least one ID document (ID, TIN or voter card)' };
+  if (input.length > 3) return { error: 'You can upload up to 3 documents' };
+  const docs = [];
+  for (const d of input) {
+    const type = d && d.type;
+    let mime = d && d.mime;
+    let data = String((d && d.data) || '');
+    const m = data.match(/^data:([^;]+);base64,/);
+    if (m) { mime = mime || m[1]; data = data.slice(m[0].length); }
+    if (!DOC_TYPES.includes(type)) return { error: 'Unknown document type' };
+    if (!DOC_MIMES.includes(mime)) return { error: 'Documents must be a photo (JPG/PNG/WebP) or a PDF' };
+    if (!/^[A-Za-z0-9+/=\r\n]+$/.test(data)) return { error: 'Document could not be read' };
+    const size = Math.floor((data.length * 3) / 4);
+    if (size > MAX_DOC_BYTES) return { error: 'A document is too large (max 3.5 MB)' };
+    if (size < 500) return { error: 'A document looks empty' };
+    docs.push({ type, mime, data, size });
+  }
+  return { docs };
+}
+
 module.exports = (db) => {
   const sessionFor = (user) => {
     const payload = { id: user.id, name: user.name, phone: user.phone, role: user.role, created_at: user.created_at };
@@ -21,6 +47,7 @@ module.exports = (db) => {
   router.post('/register', loginLimiter, async (req, res) => {
     try {
       const { name, phone, password, role } = req.body || {};
+      const parsedDocs = role === 'driver' ? { docs: [] } : parseDocuments(req.body && req.body.documents);
       const email = normEmail(req.body && req.body.email);
       if (!name || !phone || !password) {
         return res.status(400).json({ error: 'name, phone and password are required' });
@@ -34,6 +61,7 @@ module.exports = (db) => {
         return res.status(400).json({ error: 'Password must be at least 8 characters' });
       }
 
+      if (parsedDocs.error) return res.status(400).json({ error: parsedDocs.error });
       const finalRole = 'rider';
       const existing = db.prepare('SELECT id FROM users WHERE phone=?').get(phone);
       if (existing) return res.status(409).json({ error: 'Phone number already registered' });
@@ -45,6 +73,17 @@ module.exports = (db) => {
       const userId = uuidv4();
       db.prepare('INSERT INTO users (id, name, phone, password_hash, role, email, email_verified) VALUES (?,?,?,?,?,?,0)')
         .run(userId, name, phone, hashed, finalRole, email);
+      const insDoc = db.prepare('INSERT INTO user_documents (id, user_id, doc_type, mime, size, data) VALUES (?,?,?,?,?,?)');
+      for (const d of parsedDocs.docs) insDoc.run(uuidv4(), userId, d.type, d.mime, d.size, d.data);
+      try {
+        for (const a of db.prepare("SELECT id FROM users WHERE role='admin'").all()) {
+          sendPush(db, a.id, {
+            title: '🪪 New rider registered',
+            body: `${name} (${phone}) uploaded ${parsedDocs.docs.length} ID document(s) for review.`,
+            url: '/admin/#accounts',
+          });
+        }
+      } catch {}
 
       const { emailed } = await issueCode(db, { id: userId, name }, email, 'verify');
       res.json({ needsVerification: true, phone, email, emailed });

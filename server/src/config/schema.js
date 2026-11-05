@@ -110,6 +110,18 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'users', 'suspended_at', 'TEXT');
   ensureColumn(db, 'roadside_trips', 'status', "TEXT DEFAULT 'finished'");
   ensureColumn(db, 'roadside_trips', 'ended_at', 'TEXT');
+  db.exec(`
+CREATE TABLE IF NOT EXISTS user_documents (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  doc_type TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_user_documents_user ON user_documents(user_id);
+`);
 }
 
 module.exports = { initSchema };

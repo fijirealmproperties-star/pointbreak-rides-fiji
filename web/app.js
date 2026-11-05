@@ -246,7 +246,7 @@ function renderAccounts() {
       return `<tr style="border-top:1px solid #2a2f3a">
         <td>${escapeHtml(u.name)}</td><td>${escapeHtml(u.phone)}</td>
         <td>${u.email ? escapeHtml(u.email) + (u.email_verified ? ' ✓' : ' (unverified)') : '<span class="admin-hint">none</span>'}</td>
-        <td>${escapeHtml(u.role)}</td>
+        <td>${escapeHtml(u.role)}${u.role === 'rider' ? (u.doc_count ? ' · 🪪 ' + u.doc_count + ' ID' : ' · <span class="admin-hint">no ID</span>') : ''}</td>
         <td>${trips || 0}</td><td>${u.cancelled_rides || 0}</td>
         <td>${escapeHtml((u.created_at || '').slice(0, 10))}</td>
         <td>${u.suspended ? '⛔ Suspended' : 'Active'}</td>
@@ -271,9 +271,35 @@ async function viewAccount(id) {
       ${driver ? '<div style="margin-top:8px">Map icon: ' + ['🚗','🚘','🚙','🛻','🚐','🚌','🚕'].map(ic => `<button class="reg-btn reg-btn-ghost" style="font-size:20px;padding:2px 8px;${(driver.vehicle_icon || '🚗') === ic ? 'outline:2px solid #0af' : ''}" onclick="setVehicleIcon('${escapeHtml(driver.id)}','${ic}','${id}')">${ic}</button>`).join(' ') + '</div>' : ''}
       <h4 style="margin:10px 0 4px">Recent rides</h4>` +
       (rs.length ? rs.map(r => `<div class="admin-hint">${escapeHtml((r.requested_at || '').slice(0, 16))} · ${escapeHtml(r.pickup_place)} → ${escapeHtml(r.dropoff_place)} · ${escapeHtml(r.status)} · FJ$${escapeHtml(r.final_fare != null ? r.final_fare : r.fare)} · rider ${escapeHtml(r.rider_name || '?')} / driver ${escapeHtml(r.driver_name || '—')}${r.rating ? ' · ★' + escapeHtml(r.rating) : ''}</div>`).join('') : '<div class="admin-hint">No rides.</div>') +
-      '</div>';
+      '<div id="acct-docs"></div></div>';
+    loadDocs(id);
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   } catch (e) { acctMsg(e.message, false); }
+}
+
+const DOC_NAMES = { national_id: 'National ID', tin: 'TIN ID', voters_card: "Voter's card", passport: 'Passport', drivers_licence: "Driver's licence" };
+
+async function loadDocs(userId) {
+  const box = document.getElementById('acct-docs');
+  if (!box) return;
+  try {
+    const { documents } = await acctApi('/users/' + encodeURIComponent(userId) + '/documents');
+    if (!documents.length) { box.innerHTML = '<h4 style="margin:10px 0 4px">ID documents</h4><div class="admin-hint">None uploaded.</div>'; return; }
+    box.innerHTML = '<h4 style="margin:10px 0 4px">ID documents</h4><div id="doc-grid" style="display:flex;flex-wrap:wrap;gap:10px"></div>';
+    const grid = document.getElementById('doc-grid');
+    for (const d of documents) {
+      const res = await fetch(`${API_URL}/api/admin/documents/${encodeURIComponent(d.id)}`, { headers: { Authorization: 'Bearer ' + adminToken } });
+      if (!res.ok) continue;
+      const url = URL.createObjectURL(await res.blob());
+      const cell = document.createElement('div');
+      cell.style.cssText = 'max-width:220px';
+      const isPdf = d.mime === 'application/pdf';
+      cell.innerHTML = `<div class="admin-hint">${escapeHtml(DOC_NAMES[d.doc_type] || d.doc_type)} · ${escapeHtml((d.created_at || '').slice(0, 16))}</div>` +
+        (isPdf ? '' : `<a href="${url}" target="_blank"><img src="${url}" style="max-width:220px;max-height:160px;border-radius:6px;border:1px solid #2a2f3a"></a>`) +
+        `<div><a class="reg-btn reg-btn-ghost" href="${url}" target="_blank">Open</a> <a class="reg-btn reg-btn-ghost" href="${url}" download="${escapeHtml(d.doc_type)}-${escapeHtml(userId.slice(0, 6))}.${isPdf ? 'pdf' : 'jpg'}">Save</a></div>`;
+      grid.appendChild(cell);
+    }
+  } catch (e) { box.innerHTML = '<div class="admin-hint">Could not load documents: ' + escapeHtml(e.message) + '</div>'; }
 }
 
 async function setVehicleIcon(driverId, icon, userId) {
