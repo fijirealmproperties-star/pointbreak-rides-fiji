@@ -14,7 +14,7 @@ import { api, setAuth, clearAuth, setKeepSignedIn, User } from "../api";
 import { isDriverApp, setDriverMode, DEMO_RIDER, DEMO_DRIVER, DEMO_ENABLED } from "../appMode";
 
 type Doc = { type: string; mime: string; data: string; name: string };
-const DOC_LABELS: Record<string, string> = { national_id: "National ID", tin: "TIN ID", voters_card: "Voter's card" };
+const DOC_LABELS: Record<string, string> = { passport: "Passport", tin: "TIN ID", voters_card: "Voter's card" };
 
 function pickFile(camera: boolean): Promise<File | null> {
   return new Promise((resolve) => {
@@ -80,7 +80,7 @@ export default function LoginScreen({ onLogin }: Props) {
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [keep, setKeep] = useState(true);
-  const [docType, setDocType] = useState("national_id");
+  const [docType, setDocType] = useState("passport");
   const [docs, setDocs] = useState<Doc[]>([]);
 
   async function addDoc(camera: boolean) {
