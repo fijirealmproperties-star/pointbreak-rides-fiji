@@ -125,6 +125,23 @@ export async function getUser(): Promise<User | null> {
   const raw = await AsyncStorage.getItem(USER_KEY);
   return raw ? JSON.parse(raw) : null;
 }
+const KEEP_KEY = "pb_keep";
+// "Keep me logged in" off: the sign-in only lasts until the app/tab is closed.
+export async function setKeepSignedIn(keep: boolean) {
+  await AsyncStorage.setItem(KEEP_KEY, keep ? "1" : "0");
+  try { if (typeof sessionStorage !== "undefined") sessionStorage.setItem("pb_sess", "1"); } catch {}
+}
+export async function dropSessionOnlyLogin(): Promise<boolean> {
+  try {
+    if (typeof sessionStorage === "undefined") return false;
+    if ((await AsyncStorage.getItem(KEEP_KEY)) === "0" && !sessionStorage.getItem("pb_sess")) {
+      await clearAuth();
+      return true;
+    }
+  } catch {}
+  return false;
+}
+
 export async function clearAuth() {
   await AsyncStorage.removeItem(TOKEN_KEY);
   await AsyncStorage.removeItem(REFRESH_KEY);

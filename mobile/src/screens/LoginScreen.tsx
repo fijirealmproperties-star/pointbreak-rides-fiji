@@ -10,7 +10,7 @@ import {
   Platform,
 } from "react-native";
 import { colors, typography } from "../theme";
-import { api, setAuth, clearAuth, User } from "../api";
+import { api, setAuth, clearAuth, setKeepSignedIn, User } from "../api";
 import { isDriverApp, setDriverMode, DEMO_RIDER, DEMO_DRIVER, DEMO_ENABLED } from "../appMode";
 
 type Props = {
@@ -29,6 +29,8 @@ export default function LoginScreen({ onLogin }: Props) {
   const [password, setPassword] = useState(demo && driverApp ? DEMO_DRIVER.password : "");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [keep, setKeep] = useState(true);
 
   function chooseRole(nextDriver: boolean) {
     setDriverAppState(nextDriver);
@@ -56,6 +58,7 @@ export default function LoginScreen({ onLogin }: Props) {
       return;
     }
     await setAuth(d.accessToken, d.user, d.refreshToken);
+    await setKeepSignedIn(keep);
     onLogin(d.user);
   }
 
@@ -248,6 +251,9 @@ export default function LoginScreen({ onLogin }: Props) {
               onChangeText={setPhone}
               keyboardType="phone-pad"
               autoCapitalize="none"
+              autoComplete="username"
+              textContentType="username"
+              importantForAutofill="yes"
             />
           ) : null}
           {mode === "register" || mode === "forgot" ? (
@@ -274,14 +280,40 @@ export default function LoginScreen({ onLogin }: Props) {
             />
           ) : null}
           {mode === "login" || mode === "register" || mode === "reset" ? (
-            <TextInput
-              style={styles.input}
-              placeholder={mode === "reset" ? "New password (min 8 characters)" : "Password"}
-              placeholderTextColor={colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-            />
+            <View style={{ position: "relative", justifyContent: "center" }}>
+              <TextInput
+                style={[styles.input, { paddingRight: 52 }]}
+                placeholder={mode === "reset" ? "New password (min 8 characters)" : "Password"}
+                placeholderTextColor={colors.textMuted}
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry={!showPw}
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
+                textContentType={mode === "login" ? "password" : "newPassword"}
+                importantForAutofill="yes"
+              />
+              <TouchableOpacity
+                onPress={() => setShowPw((v) => !v)}
+                accessibilityLabel={showPw ? "Hide password" : "Show password"}
+                style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 48, alignItems: "center", justifyContent: "center" }}
+              >
+                <Text style={{ fontSize: 20 }}>{showPw ? "🙈" : "👁️"}</Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+          {mode === "login" ? (
+            <TouchableOpacity
+              onPress={() => setKeep((v) => !v)}
+              accessibilityRole="checkbox"
+              style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}
+            >
+              <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.textMuted, alignItems: "center", justifyContent: "center", backgroundColor: keep ? colors.green : "transparent", marginRight: 10 }}>
+                {keep ? <Text style={{ color: "#fff", fontWeight: "900", fontSize: 14 }}>✓</Text> : null}
+              </View>
+              <Text style={{ color: colors.textMuted }}>Keep me logged in</Text>
+            </TouchableOpacity>
           ) : null}
 
           {info ? <Text style={styles.info}>{info}</Text> : null}

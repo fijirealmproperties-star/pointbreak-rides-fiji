@@ -18,6 +18,7 @@ import {
   refreshAccessToken,
   setOnUnauthorized,
   User,
+  dropSessionOnlyLogin,
 } from "./src/api";
 import { disconnectSocket } from "./src/socket";
 import { Screen } from "./src/navigation";
@@ -133,7 +134,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 3.4.6</Text>
+      <Text style={styles.surfTag}>Version 3.5.0</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
@@ -148,6 +149,7 @@ function Root() {
 
   useEffect(() => {
     (async () => {
+      await dropSessionOnlyLogin();
       let u = await getUser();
       if (u) {
         const token = await getToken();
