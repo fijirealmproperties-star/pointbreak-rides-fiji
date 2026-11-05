@@ -113,6 +113,8 @@ async function sendPush(db, userId, payload) {
       }
     }));
   }
+  // The installed Android app already got it; a browser notification would open the website instead of the app.
+  if (sent > 0) return sent;
   await Promise.all(rows.map(async (row) => {
     try {
       await webpush.sendNotification(JSON.parse(row.sub_json), JSON.stringify(payload), {
