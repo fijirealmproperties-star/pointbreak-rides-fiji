@@ -3,6 +3,7 @@ import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react
 import * as Location from "expo-location";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { api } from "../api";
+import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
 import { colors, typography } from "../theme";
 
 const TRIP_KEY = "pb-active-trip";
@@ -43,6 +44,7 @@ const isAirport = (r: Region) => r === "NADI_AIRPORT" || r === "OTHER_AIRPORT";
 
 // Below this speed the meter charges waiting time; above it, distance.
 const WAIT_SPEED_KMH = 15;
+const MAX_ACCURACY_M = 30;
 
 function autoPeriod(): Period {
   const h = new Date().getHours();
@@ -72,7 +74,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const [saved, setSaved] = useState<string | null>(null);
   const [lastTotal, setLastTotal] = useState<number | null>(null);
 
-  const sub = useRef<Location.LocationSubscription | null>(null);
+  const sub = useRef<(() => void) | null>(null);
+  const lastFixAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const last = useRef<{ lat: number; lng: number; t: number } | null>(null);
   const speedRef = useRef(0);
@@ -90,7 +93,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   useEffect(
     () => () => {
       if (timer.current) clearInterval(timer.current);
-      if (sub.current) sub.current.remove();
+      sub.current?.();
       releaseWake();
     },
     []
@@ -168,6 +171,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       const dt = Math.max(0, (now - lastTick.current) / 1000);
       lastTick.current = now;
       secRef.current += dt;
+      // No usable fix lately (tunnel, weak GPS): treat as stopped so waiting time keeps counting.
+      if (lastFixAt.current && now - lastFixAt.current > 6000) speedRef.current = 0;
       if (speedRef.current <= WAIT_SPEED_KMH) addFare((rates.perMin / 60) * dt);
       setSeconds(Math.floor(secRef.current));
       setFare(fareRef.current);
@@ -175,36 +180,52 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       if (++tickCount.current % 5 === 0) persist();
     }, 1000);
 
+    const onFix = (f: { latitude: number; longitude: number; accuracy: number | null; speed: number | null; time?: number | null }) => {
+      if (!runningRef.current) return;
+      const { latitude, longitude, speed } = f;
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+      const now = Date.now();
+      const stamp = f.time && Math.abs(now - f.time) < 60000 ? f.time : now;
+      if (now - stamp > 10000) return;
+      const acc = f.accuracy;
+      if (acc == null || acc <= 0 || acc > MAX_ACCURACY_M) return;
+      lastFixAt.current = now;
+      const prev = last.current;
+      if (prev && stamp <= prev.t) return;
+      last.current = { lat: latitude, lng: longitude, t: stamp };
+      if (!prev) return;
+      const dt = (stamp - prev.t) / 1000;
+      const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
+      const hasSpeed = speed != null && speed >= 0;
+      // Prefer the chip's Doppler speed: it is not affected by GPS jitter.
+      const kmh = hasSpeed ? (speed as number) * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
+      if (kmh >= 200 || dt <= 0 || dt >= 30) return;
+      speedRef.current = kmh;
+      let add = 0;
+      if (hasSpeed) {
+        if ((speed as number) > 0.8) add = ((speed as number) * dt) / 1000;
+      } else if (dKm > Math.max(0.004, (acc / 1000) * 0.8)) add = dKm;
+      if (add > 0) {
+        distRef.current += add;
+        addFare(add * rates.perKm);
+      }
+    };
+    lastFixAt.current = 0;
+    if (nativeGpsAvailable()) {
+      // Android foreground service: keeps measuring with the screen off or the app in the background.
+      const stop = await startNativeWatch(
+        (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
+        (code) => { if (code === "NOT_AUTHORIZED") Alert.alert("Location needed", "Allow location access (Always) so the meter keeps measuring in the background."); }
+      );
+      if (runningRef.current) sub.current = stop;
+      else stop();
+      return;
+    }
     const subscription = await Location.watchPositionAsync(
       { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
-      (loc) => {
-        if (!runningRef.current) return;
-        const { latitude, longitude, speed } = loc.coords;
-        const now = Date.now();
-        const prev = last.current;
-        const acc = loc.coords.accuracy;
-        if (acc != null && acc > 50) return;
-        if (prev) {
-          const dt = (now - prev.t) / 1000;
-          const dKm = haversineKm(prev.lat, prev.lng, latitude, longitude);
-          const hasSpeed = speed != null && speed >= 0;
-          // Prefer the chip's Doppler speed: it is not affected by GPS jitter.
-          const kmh = hasSpeed ? speed * 3.6 : dt > 0 ? (dKm / dt) * 3600 : 0;
-          if (kmh < 200 && dt > 0 && dt < 30) {
-            speedRef.current = kmh;
-            let add = 0;
-            if (hasSpeed && speed > 0.8) add = (speed * dt) / 1000;
-            else if (!hasSpeed && dKm > Math.max(0.003, ((acc ?? 0) / 1000) * 0.5)) add = dKm;
-            if (add > 0) {
-              distRef.current += add;
-              addFare(add * rates.perKm);
-            }
-          }
-        }
-        last.current = { lat: latitude, lng: longitude, t: now };
-      }
+      (loc) => onFix({ ...loc.coords, time: loc.timestamp })
     );
-    if (runningRef.current) sub.current = subscription;
+    if (runningRef.current) sub.current = () => subscription.remove();
     else subscription.remove();
   }
 
@@ -227,8 +248,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         if (!raw || timer.current || runningRef.current) return;
         const s = JSON.parse(raw);
         if (!s || Date.now() - s.at > 6 * 3600 * 1000) { await AsyncStorage.removeItem(TRIP_KEY); return; }
-        const perm = await Location.requestForegroundPermissionsAsync();
-        if (perm.status !== "granted") return;
+        if (!nativeGpsAvailable()) {
+          const perm = await Location.requestForegroundPermissionsAsync();
+          if (perm.status !== "granted") return;
+        }
         tripId.current = s.tripId ?? null;
         regionRef.current = s.region; periodRef.current = s.period;
         setRegion(s.region); setPeriod(s.period);
@@ -249,7 +272,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     runningRef.current = false;
     setIsRunning(false);
     if (timer.current) clearInterval(timer.current);
-    if (sub.current) sub.current.remove();
+    sub.current?.();
     releaseWake();
     timer.current = null;
     sub.current = null;

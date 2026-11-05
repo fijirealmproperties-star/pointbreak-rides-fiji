@@ -177,7 +177,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     speedRef.current = mps < SPEED_THRESHOLD_MPS ? 0 : mps;
     if (mps >= SPEED_THRESHOLD_MPS) {
       // Doppler speed is steadier than raw position jumps; fall back to displacement.
-      const add = hasSpeed ? mps * dt : d > 1 && d < 150 ? d : 0;
+      const add = hasSpeed ? mps * dt : d > Math.max(4, (acc as number) * 0.8) && d < 150 ? d : 0;
       distRef.current += add;
     }
   }
