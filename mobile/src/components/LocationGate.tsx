@@ -59,6 +59,17 @@ export default function LocationGate() {
     };
   }, [recheck]);
 
+  // Android only: opens the phone's location or app settings page.
+  function openSettings(off: boolean) {
+    try {
+      const action = off ? "android.settings.LOCATION_SOURCE_SETTINGS" : "android.settings.APPLICATION_DETAILS_SETTINGS";
+      const url = off
+        ? `intent:#Intent;action=${action};end`
+        : `intent:#Intent;action=${action};data=package:fj.pointbreak.rides;end`;
+      window.location.href = url;
+    } catch {}
+  }
+
   async function turnOn() {
     busyRef.current = true;
     setBusy(true);
@@ -68,9 +79,12 @@ export default function LocationGate() {
         try { await Location.enableNetworkProviderAsync(); } catch {}
       }
     } catch {}
+    // Only when location still cannot be detected do we send the user to settings.
+    const after = await check();
     busyRef.current = false;
     setBusy(false);
-    recheck();
+    setState(after);
+    if (after !== "ok") openSettings(after === "off");
   }
 
   if (state === "ok") return null;
@@ -83,11 +97,11 @@ export default function LocationGate() {
           <Text style={styles.title}>{off ? "Turn on your location" : "Allow location access"}</Text>
           <Text style={styles.msg}>
             {off
-              ? "Your phone's location is switched off. Pointbreak needs it to find rides, drivers and measure trips. Turn on Location in your phone's quick settings, then come back."
-              : "Pointbreak needs your location to find rides and drivers and to measure trips. Tap the button and choose Allow. If nothing appears, open your browser or phone settings, allow Location for Pointbreak, and return."}
+              ? "Your phone's location is switched off. Pointbreak needs it to find rides, drivers and measure trips. Tap the button to open your phone settings, turn Location on, then come back."
+              : "Pointbreak needs your location to find rides and drivers and to measure trips. Tap the button and choose Allow. If location still cannot be detected, your phone settings will open: allow Location for Pointbreak, then come back."}
           </Text>
           <TouchableOpacity style={styles.primary} onPress={turnOn} disabled={busy}>
-            <Text style={styles.primaryText}>{busy ? "Checking…" : off ? "I turned it on" : "Turn on location"}</Text>
+            <Text style={styles.primaryText}>{busy ? "Checking…" : "Turn on location"}</Text>
           </TouchableOpacity>
         </View>
       </View>
