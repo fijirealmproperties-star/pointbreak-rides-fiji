@@ -36,7 +36,11 @@ export async function checkForUpdate() {
   }
   if (!latest) return;
   if (latest === mine) { set(null); return; }
-  try { if (localStorage.getItem("pb-updated-to") === latest) { set(null); return; } } catch {}
+  // Only stop asking after several reloads failed to reach the new build, so a stale copy never hides the update.
+  try {
+    const tries = Number(localStorage.getItem("pb-update-tries") || 0);
+    if (localStorage.getItem("pb-updated-to") === latest && tries >= 3) { set(null); return; }
+  } catch {}
   set(latest);
 }
 
@@ -68,6 +72,19 @@ export async function applyUpdate() {
     const keys = await caches.keys();
     await Promise.all(keys.map((k) => caches.delete(k)));
   } catch {}
-  try { if (available) localStorage.setItem("pb-updated-to", available); } catch {}
-  window.location.replace("/?v=" + Date.now());
+  let tries = 0;
+  try {
+    const same = localStorage.getItem("pb-updated-to") === available;
+    tries = same ? Number(localStorage.getItem("pb-update-tries") || 0) + 1 : 1;
+    if (available) localStorage.setItem("pb-updated-to", available);
+    localStorage.setItem("pb-update-tries", String(tries));
+  } catch {}
+  // Re-fetch the page and its bundle past every cache so the reload gets the new files.
+  try {
+    const html = await (await fetch(`/?t=${Date.now()}`, { cache: "reload" })).text();
+    const js = html.match(/src="(\/_expo\/static\/js\/[^"]+)"/);
+    if (js) await fetch(js[1], { cache: "reload" });
+  } catch {}
+  const path = tries % 2 === 0 ? "/index.html" : "/";
+  window.location.replace(`${path}?v=${Date.now()}`);
 }
