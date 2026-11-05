@@ -88,13 +88,13 @@ const EMOJI_STYLE =
 const LABEL_STYLE =
   "margin-top:2px;background:#0A1628;color:#F7F9FC;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px;border:1px solid #2A3B4D;white-space:nowrap";
 
+export const SURF_CAR_HTML =
+  '<div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">🚗</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div>';
+
 export const markerPinHtml = (color: string, label?: string, icon?: string) =>
   icon
-    ? '<div style="display:flex;flex-direction:column;align-items:center"><div style="' +
-      EMOJI_STYLE +
-      '">' +
-      escapeHtml(icon) +
-      "</div>" +
+    ? '<div style="display:flex;flex-direction:column;align-items:center">' +
+      (icon === "🚗" ? SURF_CAR_HTML : '<div style="' + EMOJI_STYLE + '">' + escapeHtml(icon) + '</div>') +
       (label ? '<div style="' + LABEL_STYLE + '">' + escapeHtml(label) + "</div>" : "") +
       "</div>"
     : '<div class="pb-pin" style="--c:' +
@@ -106,9 +106,9 @@ export const markerPinHtml = (color: string, label?: string, icon?: string) =>
 
 // Car icon for the moving driver; emoji cars don't rotate meaningfully, so the angle is ignored.
 export const vehicleHtml = (_color: string, _angle: number) =>
-  '<div class="pb-car" style="width:32px;height:40px;display:flex;align-items:center;justify-content:center"><div style="' +
-  EMOJI_STYLE +
-  '">🚗</div></div>';
+  '<div class="pb-car" style="width:36px;height:44px;display:flex;align-items:center;justify-content:center">' +
+  SURF_CAR_HTML +
+  '</div>';
 
 export function mapStateFromProps(props: {
   center: { lat: number; lng: number };
