@@ -41,6 +41,8 @@ const SEED_DRIVERS: Array<{ lat: number; lng: number }> = [
 
 const SAVED_PLACES = [
   { id: "nadi-airport", icon: "✈", name: "Nadi Airport", sub: "Nadi, Viti Levu" },
+  { id: "nadi-intl-departure", icon: "🛫", name: "International Departure", sub: "Nadi Airport" },
+  { id: "nadi-arrivals", icon: "🛬", name: "Arrivals", sub: "Nadi Airport" },
   { id: "suva-city", icon: "📍", name: "Suva City Centre", sub: "Suva, Viti Levu" },
   { id: "sigatoka-beach", icon: "🏖", name: "Sigatoka Beach", sub: "Coral Coast" },
   { id: "denarau", icon: "⛵", name: "Denarau Marina", sub: "Nadi, Viti Levu" },
