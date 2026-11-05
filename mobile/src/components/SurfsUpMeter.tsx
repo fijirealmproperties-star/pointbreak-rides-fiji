@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import * as Location from "expo-location";
 import { api } from "../api";
+import { nativeGpsAvailable, startNativeWatch } from "../nativeGps";
 import { colors, typography } from "../theme";
 
 // FCCC Fiji taxi interim rates.
@@ -11,6 +12,10 @@ const DISTANCE_RATE = 0.14; // per 100 m
 const WAITING_RATE = 0.18; // per minute
 const SPEED_THRESHOLD_MPS = 1.11; // about 4 km/h: below this the meter charges waiting time
 const MAX_ACCURACY_M = 30;
+const STORE_KEY = "pb-surfs-trip";
+const MAX_RESUME_MS = 8 * 3600 * 1000;
+
+type Fix = { latitude: number; longitude: number; accuracy: number | null; speed: number | null; time?: number | null };
 
 const isNight = () => {
   const h = new Date().getHours();
@@ -41,7 +46,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
   const [lastTotal, setLastTotal] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
 
-  const sub = useRef<Location.LocationSubscription | null>(null);
+  const sub = useRef<(() => void) | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const wake = useRef<any>(null);
   const runningRef = useRef(false);
@@ -56,17 +61,69 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
   const tripId = useRef<number | null>(null);
   const startReq = useRef<Promise<number | null>>(Promise.resolve(null));
   const tariffRef = useRef("SURFS_UP_day");
+  const lastFixAt = useRef(0);
+  const saveTick = useRef(0);
 
   const fareNow = () => baseRef.current + (distRef.current / 100) * DISTANCE_RATE + (waitRef.current / 60) * WAITING_RATE;
 
   useEffect(
     () => () => {
       if (timer.current) clearInterval(timer.current);
-      sub.current?.remove();
+      sub.current?.();
       releaseWake();
     },
     []
   );
+
+  function saveTrip() {
+    try {
+      localStorage.setItem(
+        STORE_KEY,
+        JSON.stringify({
+          startedAt: startedAt.current,
+          base: baseRef.current,
+          tariff: tariffRef.current,
+          dist: distRef.current,
+          wait: waitRef.current,
+          tripId: tripId.current,
+          savedAt: Date.now(),
+        })
+      );
+    } catch {}
+  }
+  function clearTrip() {
+    try { localStorage.removeItem(STORE_KEY); } catch {}
+  }
+
+  // A trip survives the app being killed or reloaded: restore and keep metering.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (!s || Date.now() - s.savedAt > MAX_RESUME_MS) { clearTrip(); return; }
+      baseRef.current = s.base;
+      tariffRef.current = s.tariff;
+      distRef.current = s.dist || 0;
+      waitRef.current = s.wait || 0;
+      startedAt.current = s.startedAt;
+      tripId.current = s.tripId ?? null;
+      startReq.current = Promise.resolve(tripId.current);
+      setNight(s.tariff === "SURFS_UP_night");
+      setNote("Trip resumed. Distance travelled while the app was closed is not counted.");
+      begin();
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    if (!running || typeof document === "undefined") return;
+    const onVis = () => {
+      if (document.visibilityState !== "visible") return;
+      tick();
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+  }, [running]);
 
   async function holdWake() {
     try {
@@ -79,13 +136,6 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     wake.current = null;
   }
 
-  useEffect(() => {
-    if (!running || typeof document === "undefined") return;
-    const onVis = () => { if (document.visibilityState === "visible") holdWake(); };
-    document.addEventListener("visibilitychange", onVis);
-    return () => document.removeEventListener("visibilitychange", onVis);
-  }, [running]);
-
   function paint() {
     setFare(fareNow());
     setDistM(distRef.current);
@@ -94,15 +144,31 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     setAccuracy(accRef.current);
   }
 
-  function onFix(loc: Location.LocationObject) {
-    const { latitude, longitude, accuracy: acc, speed } = loc.coords;
-    accRef.current = acc ?? null;
-    if (acc != null && acc > MAX_ACCURACY_M) return;
+  function tick() {
     const now = Date.now();
+    const dt = Math.max(0, (now - tickAt.current) / 1000);
+    tickAt.current = now;
+    // No usable fix for a while (tunnel, weak GPS): stop adding distance, keep time honest.
+    if (lastFixAt.current && now - lastFixAt.current > 6000) speedRef.current = 0;
+    if (speedRef.current === 0) waitRef.current += dt;
+    paint();
+    if (++saveTick.current % 5 === 0) saveTrip();
+  }
+
+  function onFix(loc: Fix) {
+    const { latitude, longitude, accuracy: acc, speed } = loc;
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+    accRef.current = acc ?? null;
+    const now = Date.now();
+    const stamp = loc.time && Math.abs(now - loc.time) < 60000 ? loc.time : now;
+    if (now - stamp > 10000) return;
+    if (acc == null || acc <= 0 || acc > MAX_ACCURACY_M) return;
+    lastFixAt.current = now;
     const prev = last.current;
-    last.current = { lat: latitude, lng: longitude, t: now };
+    if (prev && stamp <= prev.t) return;
+    last.current = { lat: latitude, lng: longitude, t: stamp };
     if (!runningRef.current || !prev) return;
-    const dt = (now - prev.t) / 1000;
+    const dt = (stamp - prev.t) / 1000;
     if (dt <= 0 || dt > 30) return;
     const d = distanceM(prev.lat, prev.lng, latitude, longitude);
     const hasSpeed = speed != null && speed >= 0;
@@ -129,31 +195,44 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     tripId.current = null;
     setLastTotal(null);
     setNote("You are now offline. Switch Online on the Home tab when the trip is done.");
-    runningRef.current = true;
     startedAt.current = Date.now();
+    startReq.current = api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffRef.current } })
+      .then((r: any) => { tripId.current = r?.trip_id ?? null; saveTrip(); return tripId.current; })
+      .catch(() => null);
+    begin();
+  }
+
+  async function begin() {
+    if (runningRef.current) return;
+    runningRef.current = true;
     tickAt.current = Date.now();
+    lastFixAt.current = 0;
+    last.current = null;
     setRunning(true);
     paint();
-    startReq.current = api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffRef.current } })
-      .then((r: any) => { tripId.current = r?.trip_id ?? null; return tripId.current; })
-      .catch(() => null);
+    saveTrip();
     holdWake();
     // Real elapsed time keeps waiting charges right even if timers are throttled.
-    timer.current = setInterval(() => {
-      const now = Date.now();
-      const dt = Math.max(0, (now - tickAt.current) / 1000);
-      tickAt.current = now;
-      if (speedRef.current === 0) waitRef.current += dt;
-      paint();
-    }, 1000);
+    if (timer.current) clearInterval(timer.current);
+    timer.current = setInterval(tick, 1000);
     try {
+      if (nativeGpsAvailable()) {
+        // Android foreground service: keeps measuring with the screen off or the app in the background.
+        const stop = await startNativeWatch(
+          (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
+          (code) => { if (code === "NOT_AUTHORIZED") Alert.alert("Location needed", "Allow location access (Always) so the meter keeps measuring in the background."); }
+        );
+        if (runningRef.current) sub.current = stop;
+        else stop();
+        return;
+      }
       const perm = await Location.requestForegroundPermissionsAsync();
       if (perm.status !== "granted") throw new Error("denied");
       const s = await Location.watchPositionAsync(
         { accuracy: Location.Accuracy.BestForNavigation, timeInterval: 1000, distanceInterval: 0 },
-        onFix
+        (loc) => onFix({ ...loc.coords, time: loc.timestamp })
       );
-      if (runningRef.current) sub.current = s;
+      if (runningRef.current) sub.current = () => s.remove();
       else s.remove();
     } catch {
       Alert.alert("Location needed", "Allow location access so the meter can measure distance.");
@@ -166,9 +245,10 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     setRunning(false);
     if (timer.current) clearInterval(timer.current);
     timer.current = null;
-    sub.current?.remove();
+    sub.current?.();
     sub.current = null;
     releaseWake();
+    clearTrip();
     const total = Number(fareNow().toFixed(2));
     const body = {
       trip_id: tripId.current,
@@ -235,7 +315,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
       ) : null}
       {note ? <Text style={styles.saved}>{note}</Text> : null}
       <Text style={styles.status}>
-        FJ$0.14 per 100 m (FJ$1.40/km) while moving, FJ$0.18 per minute waiting under 4 km/h. GPS fixes worse than 30 m are ignored. Keep the app open during a trip.
+        FJ$0.14 per 100 m (FJ$1.40/km) while moving, FJ$0.18 per minute waiting under 4 km/h. GPS fixes worse than 30 m are ignored. On the Android app the meter keeps running in the background and with the screen off; in a browser keep the app open.
       </Text>
     </View>
   );
