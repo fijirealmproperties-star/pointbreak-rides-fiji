@@ -21,16 +21,13 @@ function probeWeb(): Promise<State> {
 
 async function check(): Promise<State> {
   try {
-    const perm = await Location.getForegroundPermissionsAsync();
-    if (perm.status === "denied") return "denied";
-    if (perm.status === "granted") {
-      if (Platform.OS !== "web") {
-        const on = await Location.hasServicesEnabledAsync();
-        return on ? "ok" : "off";
-      }
-      return await probeWeb();
+    if (Platform.OS !== "web") {
+      const perm = await Location.getForegroundPermissionsAsync();
+      if (perm.status === "denied") return "denied";
+      if (perm.status === "granted" && !(await Location.hasServicesEnabledAsync())) return "off";
+      return "ok";
     }
-    return "denied";
+    return await probeWeb();
   } catch {
     return "ok";
   }
@@ -41,11 +38,14 @@ export default function LocationGate() {
   const [state, setState] = useState<State>("ok");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const [hiddenUntil, setHiddenUntil] = useState(0);
+  const [, setTick] = useState(0);
   const updateAvailable = useUpdateAvailable();
 
   const recheck = useCallback(async () => {
     if (busyRef.current) return;
     setState(await check());
+    setTick((n) => n + 1);
   }, []);
 
   useEffect(() => {
@@ -90,15 +90,18 @@ export default function LocationGate() {
   }
 
   // A pending update is shown first, in front of this prompt.
-  if (state === "ok" || updateAvailable) return null;
+  if (state === "ok" || updateAvailable || Date.now() < hiddenUntil) return null;
   return (
-    <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
+    <Modal visible transparent animationType="fade" onRequestClose={() => setHiddenUntil(Date.now() + 5 * 60 * 1000)}>
       <View style={styles.backdrop}>
         <View style={styles.box}>
           <Text style={styles.title}>Turn on your location</Text>
           <Text style={styles.msg}>Pointbreak cannot detect your location. Tap the button to open your phone settings, turn Location on, then come back.</Text>
           <TouchableOpacity style={styles.primary} onPress={turnOn} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Checking…" : "Turn on location"}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ paddingVertical: 12, alignItems: "center", marginTop: 6 }} onPress={() => setHiddenUntil(Date.now() + 5 * 60 * 1000)}>
+            <Text style={{ color: colors.textMuted, fontWeight: "700", fontSize: typography.body }}>Not now</Text>
           </TouchableOpacity>
         </View>
       </View>
