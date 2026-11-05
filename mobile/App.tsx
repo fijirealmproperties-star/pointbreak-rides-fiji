@@ -34,6 +34,7 @@ import ShareAppCard from "./src/components/ShareAppCard";
 import UpdatePrompt from "./src/components/UpdatePrompt";
 import UpdateButton from "./src/components/UpdateButton";
 import NotificationPrompt from "./src/components/NotificationPrompt";
+import LocationGate from "./src/components/LocationGate";
 
 type TabKey = "home" | "trips" | "meter" | "profile";
 
@@ -132,7 +133,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 3.0</Text>
+      <Text style={styles.surfTag}>Version 3.1</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
@@ -276,6 +277,7 @@ export default function App() {
       <Root />
       <UpdatePrompt />
       <NotificationPrompt />
+      <LocationGate />
     </SafeAreaProvider>
   );
 }
