@@ -9,7 +9,7 @@ const isWeb = Platform.OS === "web" && typeof window !== "undefined";
 const SEEN_KEY = "pb-notice-seen";
 const ASKED_KEY = "pb-notif-asked";
 
-function nativeNotifs(): any | null {
+export function nativeNotifs(): any | null {
   const cap = (globalThis as any).Capacitor;
   if (!cap?.isNativePlatform?.()) return null;
   try {
@@ -19,7 +19,7 @@ function nativeNotifs(): any | null {
   }
 }
 
-async function permissionState(): Promise<"granted" | "denied" | "ask" | "unsupported"> {
+export async function permissionState(): Promise<"granted" | "denied" | "ask" | "unsupported"> {
   const n = nativeNotifs();
   if (n) {
     try {

@@ -34,6 +34,7 @@ import NoticeBell from "./src/components/NoticeBell";
 import ShareAppCard from "./src/components/ShareAppCard";
 import UpdatePrompt from "./src/components/UpdatePrompt";
 import UpdateButton from "./src/components/UpdateButton";
+import NotificationButton from "./src/components/NotificationButton";
 import NotificationPrompt from "./src/components/NotificationPrompt";
 import LocationGate from "./src/components/LocationGate";
 
@@ -127,6 +128,8 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
         </View>
       ) : null}
 
+      <NotificationButton />
+
       <ShareAppCard />
 
       <UpdateButton />
@@ -134,7 +137,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 3.6.1</Text>
+      <Text style={styles.surfTag}>Version 3.7.0</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>
