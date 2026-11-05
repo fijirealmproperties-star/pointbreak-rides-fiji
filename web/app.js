@@ -252,10 +252,19 @@ async function viewAccount(id) {
       <div class="admin-hint">${escapeHtml(user.phone)} · joined ${escapeHtml((user.created_at || '').slice(0, 10))}
       ${user.suspended ? ' · ⛔ Suspended: ' + escapeHtml(user.suspended_reason || 'no reason given') : ''}
       ${driver ? '<br>' + escapeHtml([driver.vehicle_type, driver.vehicle_model, driver.license_plate].filter(Boolean).join(' · ')) + ' · ★ ' + escapeHtml(Number(driver.rating || 5).toFixed(1)) : ''}</div>
+      ${driver ? '<div style="margin-top:8px">Map icon: ' + ['🚗','🚘','🚙','🛻','🚐','🚌','🚕'].map(ic => `<button class="reg-btn reg-btn-ghost" style="font-size:20px;padding:2px 8px;${(driver.vehicle_icon || '🚗') === ic ? 'outline:2px solid #0af' : ''}" onclick="setVehicleIcon('${escapeHtml(driver.id)}','${ic}','${id}')">${ic}</button>`).join(' ') + '</div>' : ''}
       <h4 style="margin:10px 0 4px">Recent rides</h4>` +
       (rs.length ? rs.map(r => `<div class="admin-hint">${escapeHtml((r.requested_at || '').slice(0, 16))} · ${escapeHtml(r.pickup_place)} → ${escapeHtml(r.dropoff_place)} · ${escapeHtml(r.status)} · FJ$${escapeHtml(r.final_fare != null ? r.final_fare : r.fare)} · rider ${escapeHtml(r.rider_name || '?')} / driver ${escapeHtml(r.driver_name || '—')}${r.rating ? ' · ★' + escapeHtml(r.rating) : ''}</div>`).join('') : '<div class="admin-hint">No rides.</div>') +
       '</div>';
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  } catch (e) { acctMsg(e.message, false); }
+}
+
+async function setVehicleIcon(driverId, icon, userId) {
+  try {
+    await acctApi('/drivers/' + encodeURIComponent(driverId), 'PATCH', { vehicle_icon: icon });
+    acctMsg('Vehicle icon updated', true);
+    viewAccount(userId);
   } catch (e) { acctMsg(e.message, false); }
 }
 
@@ -352,6 +361,7 @@ async function registerDriver() {
   const password = document.getElementById('reg-password').value;
   const vehicle_type = document.getElementById('reg-vehicle-type').value.trim();
   const vehicle_model = document.getElementById('reg-vehicle-model').value.trim();
+  const vehicle_icon = document.getElementById('reg-vehicle-icon').value;
   const license_plate = document.getElementById('reg-plate').value.trim();
   const email = document.getElementById('reg-email').value.trim();
 
@@ -363,7 +373,7 @@ async function registerDriver() {
     const res = await fetch(`${API_URL}/api/admin/drivers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${adminToken}` },
-      body: JSON.stringify({ name, phone, password, vehicle_type, vehicle_model, license_plate, email }),
+      body: JSON.stringify({ name, phone, password, vehicle_type, vehicle_model, vehicle_icon, license_plate, email }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401) { adminToken = null; localStorage.removeItem('pb_admin_token'); renderAdminState(); status.textContent = 'Admin session expired — sign in again'; status.className = 'register-status error'; return; }

@@ -156,7 +156,7 @@ module.exports = (db, io, matchingEngine) => {
       }
 
       const rides = db.prepare(`
-        SELECT r.*, d.full_name AS driver_name, d.phone AS driver_phone, d.vehicle_type, d.vehicle_model,
+        SELECT r.*, d.full_name AS driver_name, d.phone AS driver_phone, d.vehicle_type, d.vehicle_icon, d.vehicle_model,
                d.license_plate, d.rating AS driver_rating, d.trips AS driver_trips, u.name AS rider_name
         FROM rides r
         LEFT JOIN drivers d ON d.id = r.driver_id

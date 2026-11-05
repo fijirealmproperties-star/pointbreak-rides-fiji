@@ -1,7 +1,7 @@
 const loadRide = (db, id) => {
   return db.prepare(`
     SELECT r.*,
-           d.full_name AS driver_name, d.phone AS driver_phone, d.vehicle_type, d.vehicle_model,
+           d.full_name AS driver_name, d.phone AS driver_phone, d.vehicle_type, d.vehicle_icon, d.vehicle_model,
            d.license_plate, d.rating AS driver_rating, d.trips AS driver_trips,
            u.name AS rider_name, u.phone AS rider_phone
     FROM rides r

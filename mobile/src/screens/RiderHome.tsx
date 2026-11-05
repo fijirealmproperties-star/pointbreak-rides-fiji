@@ -319,6 +319,7 @@ export default function RiderHome({ onOpenRide }: Props) {
             lng: d.lng,
             color: colors.sky,
             label: d.name ? d.name.split(" ")[0] : "Driver",
+            icon: d.icon || "🚗",
           }))
       );
     };
@@ -337,7 +338,7 @@ export default function RiderHome({ onOpenRide }: Props) {
   }, []);
 
   const markers: MapMarker[] = useMemo(() => {
-    const out: MapMarker[] = driveMarkers.map((m) => ({ ...m, icon: "🚗" }));
+    const out: MapMarker[] = driveMarkers.map((m) => ({ ...m, icon: m.icon || "🚗" }));
     if (pickup) out.push({ id: "pickup", lat: pickup.lat, lng: pickup.lng, color: "#000000", label: "", icon: "🧍" });
     if (dropoff) out.push({ id: "dropoff", lat: dropoff.lat, lng: dropoff.lng, color: "#00C853", label: "", icon: "📍" });
     return out;

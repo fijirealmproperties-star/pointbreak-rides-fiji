@@ -56,6 +56,7 @@ type MapRuntime = {
   markerSig: string | null;
   vehicleMarker: L.Marker | null;
   vehicleAngle: number | null;
+  vehicleIcon?: string;
   needsFit: boolean;
   pinZoom: number | null;
 };
@@ -175,12 +176,17 @@ function applyState(rt: MapRuntime, s: MapState) {
   // Vehicle — reuse a single marker and just move/rotate it each update.
   if (s.vehicle) {
     const ang = (s.vehicle.angle || s.vehicleAngle || 0) % 360;
+    if (rt.vehicleMarker && rt.vehicleIcon !== s.vehicle.icon) {
+      rt.vehicleMarker.remove();
+      rt.vehicleMarker = null;
+    }
     if (!rt.vehicleMarker) {
+      rt.vehicleIcon = s.vehicle.icon;
       const color = s.vehicle.color || "#FF6B35";
       rt.vehicleMarker = L.marker([s.vehicle.lat, s.vehicle.lng], {
         icon: L.divIcon({
           className: "",
-          html: vehicleHtml(color, ang),
+          html: vehicleHtml(color, ang, s.vehicle.icon),
           iconSize: [32, 40],
           iconAnchor: [16, 20],
         }),

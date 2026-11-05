@@ -16,6 +16,7 @@ export function getApiUrl() {
 export interface DriverProfile {
   id: string;
   vehicle_type: string;
+  vehicle_icon?: string | null;
   vehicle_model: string;
   license_plate: string;
   status: string;
@@ -75,6 +76,7 @@ export interface Ride {
   driver_name?: string | null;
   driver_phone?: string | null;
   vehicle_type?: string | null;
+  vehicle_icon?: string | null;
   vehicle_model?: string | null;
   license_plate?: string | null;
   driver_rating?: number | null;

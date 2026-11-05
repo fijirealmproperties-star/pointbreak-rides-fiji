@@ -269,7 +269,7 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
         route={route}
         vehicle={
           driverLat != null && driverLng != null
-            ? { lat: driverLat, lng: driverLng, angle: vehicleAngle, color: colors.sunset }
+            ? { lat: driverLat, lng: driverLng, angle: vehicleAngle, color: colors.sunset, icon: ride.vehicle_icon || undefined }
             : undefined
         }
       />

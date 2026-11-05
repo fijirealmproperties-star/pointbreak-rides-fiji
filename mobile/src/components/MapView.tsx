@@ -139,11 +139,12 @@ function applyState(s) {
     if (s.vehicle) bounds.extend([s.vehicle.lat, s.vehicle.lng]);
   }
 
-  (s.markers || []).forEach(function (m) {
+  function sv(i){var ok=['🚗','🚕','🚙','🛻','🚐','🚌','🚘'];return '<div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">' + (ok.indexOf(i)>=0?i:'🚗') + '</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div>';}
+(s.markers || []).forEach(function (m) {
     var c = m.color || "#0066CC";
     var emo = "font-size:28px;line-height:32px;text-align:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))";
     var html = m.icon
-      ? '<div style="display:flex;flex-direction:column;align-items:center">' + (m.icon === '🚗' ? '<div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">🚗</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div>' : '<div style="' + emo + '">' + esc(m.icon) + '</div>') +
+      ? '<div style="display:flex;flex-direction:column;align-items:center">' + (['🚗','🚕','🚙','🛻','🚐','🚌','🚘'].indexOf(m.icon) >= 0 ? sv(m.icon) : '<div style="' + emo + '">' + esc(m.icon) + '</div>') +
         (m.label ? '<div class="pb-label">' + esc(m.label) + '</div>' : "") + '</div>'
       : '<div class="pb-pin" style="--c:' + c + '">' +
       '<div class="pb-dot"></div><div class="pb-tip"></div>' +
@@ -158,7 +159,7 @@ function applyState(s) {
   if (s.vehicle) {
     var c = s.vehicle.color || "#FF6B35";
     var ang = (s.vehicle.angle || s.vehicleAngle || 0) % 360;
-    var vhtml = '<div style="width:36px;height:44px;display:flex;align-items:center;justify-content:center"><div style="position:relative;width:34px;height:34px;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.6))"><div style="position:absolute;left:0;right:0;bottom:-2px;font-size:26px;line-height:28px;text-align:center">🚗</div><div style="position:absolute;left:0;right:0;top:-10px;font-size:20px;line-height:22px;text-align:center">🏄</div></div></div>';
+    var vhtml = '<div style="width:36px;height:44px;display:flex;align-items:center;justify-content:center">' + sv(s.vehicle.icon) + '</div>';
     L.marker([s.vehicle.lat, s.vehicle.lng], {
       icon: L.divIcon({ className: "", html: vhtml, iconSize: [32, 40], iconAnchor: [16, 20] }),
       interactive: false,

@@ -32,6 +32,10 @@ type DriverStats = {
 export default function DriverHome({ onOpenRide }: Props) {
   const insets = useSafeAreaInsets();
   const [online, setOnline] = useState(false);
+  const [vehicleIcon, setVehicleIcon] = useState("🚗");
+  useEffect(() => {
+    api<any>("/drivers/status").then((r) => { if (r?.driver?.vehicle_icon) setVehicleIcon(r.driver.vehicle_icon); }).catch(() => {});
+  }, []);
   const [busy, setBusy] = useState(false);
   const [requestRide, setRequestRide] = useState<Ride | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(30);
@@ -356,7 +360,7 @@ export default function DriverHome({ onOpenRide }: Props) {
                 if (online) api("/drivers/location", { method: "POST", body: { lat: p.lat, lng: p.lng } }).catch(() => {});
               }}
               markers={[
-                { id: "me", lat: driverPosition.lat, lng: driverPosition.lng, color: status === "online" ? colors.green : colors.ocean, label: "You", icon: "🚗" },
+                { id: "me", lat: driverPosition.lat, lng: driverPosition.lng, color: status === "online" ? colors.green : colors.ocean, label: "You", icon: vehicleIcon },
               ]}
             />
             <View style={styles.mapAttribution}>

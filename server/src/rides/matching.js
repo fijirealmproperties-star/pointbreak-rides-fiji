@@ -59,13 +59,14 @@ class MatchingEngine {
 
   registerDriver(socketId, userId, driverId, lat, lng) {
     if (!driverId) return;
-    const row = this.db.prepare('SELECT full_name FROM drivers WHERE id=?').get(driverId);
+    const row = this.db.prepare('SELECT full_name, vehicle_icon FROM drivers WHERE id=?').get(driverId);
     const entry = {
       userId,
       socketId,
       lat,
       lng,
       name: (row && row.full_name) || 'Driver',
+      icon: (row && row.vehicle_icon) || '🚗',
     };
     if (entry.socketId) this.setSocket(userId, entry.socketId);
     this.onlineDrivers.set(driverId, entry);
@@ -119,7 +120,7 @@ class MatchingEngine {
   getOnlineSnapshot() {
     const out = [];
     for (const [driverId, info] of this.onlineDrivers) {
-      out.push({ id: driverId, name: info.name || 'Driver', lat: info.lat, lng: info.lng });
+      out.push({ id: driverId, name: info.name || 'Driver', icon: info.icon || '🚗', lat: info.lat, lng: info.lng });
     }
     return out;
   }

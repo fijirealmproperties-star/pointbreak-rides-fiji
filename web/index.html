@@ -155,6 +155,15 @@
       <input id="reg-email" class="reg-input" placeholder="Email (for password reset)" autocomplete="off" />
       <input id="reg-password" class="reg-input" type="password" placeholder="Password" autocomplete="off" />
       <input id="reg-vehicle-type" class="reg-input" placeholder="Vehicle type (e.g. Taxi)" autocomplete="off" />
+      <select id="reg-vehicle-icon" class="reg-input" title="Map icon shown in rider and driver apps">
+        <option value="🚗">🚗 Sedan</option>
+        <option value="🚘">🚘 Wagon</option>
+        <option value="🚙">🚙 SUV</option>
+        <option value="🛻">🛻 Ute</option>
+        <option value="🚐">🚐 Van</option>
+        <option value="🚌">🚌 Bus</option>
+        <option value="🚕">🚕 Taxi</option>
+      </select>
       <input id="reg-vehicle-model" class="reg-input" placeholder="Vehicle model (e.g. Toyota RAV4)" autocomplete="off" />
       <input id="reg-plate" class="reg-input" placeholder="License plate (e.g. FM 1234)" autocomplete="off" />
       <button id="reg-submit" class="reg-btn" onclick="registerDriver()">Create driver</button>

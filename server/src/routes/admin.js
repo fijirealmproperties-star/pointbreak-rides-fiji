@@ -6,6 +6,8 @@ const { onlineRiders } = require('../presence');
 const { sendPush } = require('../push');
 const { normEmail, validEmail, mailConfigured } = require('../verify');
 
+const VEHICLE_ICONS = ['🚗', '🚕', '🚙', '🛻', '🚐', '🚌', '🚘'];
+
 module.exports = (db, matchingEngine) => {
   const router = express.Router();
 
@@ -294,6 +296,7 @@ module.exports = (db, matchingEngine) => {
   router.post('/drivers', async (req, res) => {
     try {
       const { name, phone, password, vehicle_type, vehicle_model, license_plate, lat, lng } = req.body || {};
+      const vehicle_icon = VEHICLE_ICONS.includes(req.body && req.body.vehicle_icon) ? req.body.vehicle_icon : '🚗';
       if (!name || !phone || !password) {
         return res.status(400).json({ error: 'name, phone and password are required' });
       }
@@ -313,7 +316,7 @@ module.exports = (db, matchingEngine) => {
         .run(userId, name, phone, hashed, 'driver', email || null);
 
       db.prepare(
-        'INSERT INTO drivers (id, user_id, full_name, phone, vehicle_type, vehicle_model, license_plate, status, lat, lng, rating, trips) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)'
+        'INSERT INTO drivers (id, user_id, full_name, phone, vehicle_type, vehicle_model, license_plate, status, lat, lng, rating, trips, vehicle_icon) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
       ).run(
         driverId,
         userId,
@@ -326,7 +329,8 @@ module.exports = (db, matchingEngine) => {
         Number(lat) || 0,
         Number(lng) || 0,
         5.0,
-        0
+        0,
+        vehicle_icon
       );
 
       const driver = db.prepare('SELECT * FROM drivers WHERE id=?').get(driverId);
@@ -340,7 +344,10 @@ module.exports = (db, matchingEngine) => {
     const driver = db.prepare('SELECT * FROM drivers WHERE id=?').get(req.params.id);
     if (!driver) return res.status(404).json({ error: 'Driver not found' });
 
-    const fields = ['vehicle_type', 'vehicle_model', 'license_plate', 'lat', 'lng'];
+    const fields = ['vehicle_type', 'vehicle_icon', 'vehicle_model', 'license_plate', 'lat', 'lng'];
+    if (req.body.vehicle_icon !== undefined && !VEHICLE_ICONS.includes(req.body.vehicle_icon)) {
+      return res.status(400).json({ error: 'Invalid vehicle icon' });
+    }
     const updates = [];
     const values = [];
     for (const f of fields) {

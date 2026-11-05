@@ -341,7 +341,7 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         zoom={mapZoom}
         markers={markers}
         route={route}
-        vehicle={self ? { lat: self.lat, lng: self.lng, angle: selfAngle, color: colors.ocean } : undefined}
+        vehicle={self ? { lat: self.lat, lng: self.lng, angle: selfAngle, color: colors.ocean, icon: ride.vehicle_icon || undefined } : undefined}
       />
       <View style={styles.mapAttribution}>
         <Text style={styles.mapAttributionText}>
