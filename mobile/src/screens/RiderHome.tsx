@@ -7,6 +7,8 @@ import {
   ActivityIndicator,
   ScrollView,
   RefreshControl,
+  Animated,
+  PanResponder,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, fmtFare, fmtKm, fmtDuration } from "../theme";
@@ -58,6 +60,31 @@ export default function RiderHome({ onOpenRide }: Props) {
   const [locating, setLocating] = useState(false);
   const [recenterToken, setRecenterToken] = useState(0);
   const [sheetH, setSheetH] = useState(0);
+  const [collapsed, setCollapsed] = useState(false);
+  const sheetY = useRef(new Animated.Value(0)).current;
+  const sheetHRef = useRef(0);
+  const collapsedRef = useRef(false);
+  sheetHRef.current = sheetH;
+  // Slide the sheet down to reveal the map, up to bring it back.
+  const slideTo = (down: boolean) => {
+    collapsedRef.current = down;
+    setCollapsed(down);
+    Animated.timing(sheetY, { toValue: down ? Math.max(0, sheetHRef.current - 56) : 0, duration: 220, useNativeDriver: false }).start();
+  };
+  const grabPan = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onPanResponderMove: (_, g) => {
+        const max = Math.max(0, sheetHRef.current - 56);
+        const base = collapsedRef.current ? max : 0;
+        sheetY.setValue(Math.min(max, Math.max(0, base + g.dy)));
+      },
+      onPanResponderRelease: (_, g) => {
+        if (Math.abs(g.dy) < 6) slideTo(!collapsedRef.current);
+        else slideTo(g.dy > 0);
+      },
+    })
+  ).current;
   const [pickerOpen, setPickerOpen] = useState<"pickup" | "dropoff" | null>(null);
   const [pinMode, setPinMode] = useState<"pickup" | "dropoff" | null>(null);
   const [resolvingPin, setResolvingPin] = useState(false);
@@ -455,7 +482,7 @@ export default function RiderHome({ onOpenRide }: Props) {
         markers={markers}
         route={route}
         recenterToken={recenterToken}
-        locateBottom={sheetH + 12}
+        locateBottom={(collapsed ? 56 : sheetH) + 12}
         onMapClick={pinMode ? handleMapClick : undefined}
         style={StyleSheet.absoluteFill}
       />
@@ -481,8 +508,8 @@ export default function RiderHome({ onOpenRide }: Props) {
       ) : null}
 
       {reqState === "finding" || reqState === "requesting" ? (
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
-          <View style={styles.grabber} />
+        <Animated.View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16), transform: [{ translateY: sheetY }] }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
+          <View style={styles.grabHit} {...grabPan.panHandlers}><View style={styles.grabber} /></View>
           <View style={styles.findingWrap}>
             <ActivityIndicator size="large" color="#000" />
             <Text style={styles.findingTitle}>Finding your driver</Text>
@@ -491,10 +518,10 @@ export default function RiderHome({ onOpenRide }: Props) {
               <Text style={styles.cancelBtnText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </Animated.View>
       ) : (
-        <View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16) }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
-          <View style={styles.grabber} />
+        <Animated.View style={[styles.sheet, { paddingBottom: Math.max(insets.bottom, 16), transform: [{ translateY: sheetY }] }]} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
+          <View style={styles.grabHit} {...grabPan.panHandlers}><View style={styles.grabber} /></View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
@@ -716,7 +743,7 @@ export default function RiderHome({ onOpenRide }: Props) {
               </>
             )}
           </ScrollView>
-        </View>
+        </Animated.View>
       )}
 
       <PlacePicker
@@ -761,13 +788,13 @@ const styles = StyleSheet.create({
     shadowRadius: 12,
     elevation: 16,
   },
+  grabHit: { paddingTop: 6, paddingBottom: 14, marginTop: -6, cursor: "grab" as any },
   grabber: {
     width: 36,
     height: 4,
     borderRadius: 2,
     backgroundColor: "#DDD",
     alignSelf: "center",
-    marginBottom: 14,
   },
   whereBar: {
     flexDirection: "row",
