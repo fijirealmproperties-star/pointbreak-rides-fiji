@@ -7,7 +7,7 @@ const uid = (p) => `${p}-${uuidv4().slice(0, 8)}`;
 
 function ensurePlaces(db) {
   PLACES.forEach((p) => {
-    db.prepare('INSERT OR IGNORE INTO places (id, name, short_name, type, lat, lng, region) VALUES (?,?,?,?,?,?,?)')
+    db.prepare('INSERT INTO places (id, name, short_name, type, lat, lng, region) VALUES (?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET lat=excluded.lat, lng=excluded.lng')
       .run(p.id, p.name, p.short_name, p.type, p.lat, p.lng, p.region);
   });
 }

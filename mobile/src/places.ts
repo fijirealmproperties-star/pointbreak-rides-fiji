@@ -12,7 +12,7 @@ export const PLACES: Place[] = [
   { id: "fnu-samabula", name: "FNU Samabula Campus", short_name: "FNU Samabula", type: "landmark", lat: -18.1329, lng: 178.4511, region: "Suva" },
   { id: "pacific-harbour", name: "Pacific Harbour", short_name: "Pacific Harbour", type: "city", lat: -18.2103, lng: 178.0134, region: "Coral Coast" },
   { id: "pacific-harbour-junction", name: "Pacific Harbour Junction", short_name: "PH Junction", type: "landmark", lat: -18.1700, lng: 178.1270, region: "Coral Coast" },
-  { id: "nadi-airport", name: "Nadi International Airport", short_name: "Nadi Airport", type: "airport", lat: -17.7554, lng: 177.4436, region: "Nadi" },
+  { id: "nadi-airport", name: "Nadi International Airport", short_name: "Nadi Airport", type: "airport", lat: -17.7535, lng: 177.4525, region: "Nadi" },
   { id: "nadi-town", name: "Nadi Town", short_name: "Nadi", type: "city", lat: -17.8029, lng: 177.4159, region: "Nadi" },
   { id: "denarau", name: "Denarau Island & Marina", short_name: "Denarau", type: "resort", lat: -17.7751, lng: 177.3682, region: "Nadi" },
   { id: "martintar", name: "Martintar", short_name: "Martintar", type: "city", lat: -17.7940, lng: 177.4580, region: "Nadi" },
