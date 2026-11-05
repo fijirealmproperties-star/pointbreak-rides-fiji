@@ -44,7 +44,7 @@ const isAirport = (r: Region) => r === "NADI_AIRPORT" || r === "OTHER_AIRPORT";
 
 // Below this speed the meter charges waiting time; above it, distance.
 const WAIT_SPEED_KMH = 15;
-const MAX_ACCURACY_M = 30;
+const MAX_ACCURACY_M = 50;
 
 function autoPeriod(): Period {
   const h = new Date().getHours();
@@ -70,6 +70,9 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const [isRunning, setIsRunning] = useState(false);
   const [fare, setFare] = useState<number>(getRate("VITI_LEVU", autoPeriod()).base);
   const [distance, setDistance] = useState(0);
+  const [speedKmh, setSpeedKmh] = useState(0);
+  const [gpsAcc, setGpsAcc] = useState<number | null>(null);
+  const accRef = useRef<number | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [saved, setSaved] = useState<string | null>(null);
   const [lastTotal, setLastTotal] = useState<number | null>(null);
@@ -177,6 +180,8 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       setSeconds(Math.floor(secRef.current));
       setFare(fareRef.current);
       setDistance(distRef.current);
+      setSpeedKmh(speedRef.current);
+      setGpsAcc(lastFixAt.current && now - lastFixAt.current < 6000 ? accRef.current : null);
       if (++tickCount.current % 5 === 0) persist();
     }, 1000);
 
@@ -188,6 +193,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       const stamp = f.time && Math.abs(now - f.time) < 60000 ? f.time : now;
       if (now - stamp > 10000) return;
       const acc = f.accuracy;
+      accRef.current = acc ?? null;
       if (acc == null || acc <= 0 || acc > MAX_ACCURACY_M) return;
       lastFixAt.current = now;
       const prev = last.current;
@@ -205,6 +211,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       if (hasSpeed) {
         if ((speed as number) > 0.8) add = ((speed as number) * dt) / 1000;
       } else if (dKm > Math.max(0.004, (acc / 1000) * 0.8)) add = dKm;
+      else last.current = prev;
       if (add > 0) {
         distRef.current += add;
         addFare(add * rates.perKm);
@@ -347,6 +354,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         <View style={styles.statBox}>
           <Text style={styles.statVal}>{formatTime(seconds)}</Text>
           <Text style={styles.label}>Time</Text>
+        </View>
+        <View style={styles.statBox}>
+          <Text style={styles.statVal}>{speedKmh.toFixed(0)}</Text>
+          <Text style={styles.label}>{gpsAcc != null ? `km/h · GPS ±${Math.round(gpsAcc)}m` : isRunning ? "km/h · searching GPS…" : "km/h"}</Text>
         </View>
       </View>
 

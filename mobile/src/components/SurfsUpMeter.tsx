@@ -11,7 +11,7 @@ const NIGHT_FLAGFALL = 3.0; // 9:00 PM to 6:00 AM
 const DISTANCE_RATE = 0.14; // per 100 m
 const WAITING_RATE = 0.18; // per minute
 const SPEED_THRESHOLD_MPS = 1.11; // about 4 km/h: below this the meter charges waiting time
-const MAX_ACCURACY_M = 30;
+const MAX_ACCURACY_M = 50;
 const STORE_KEY = "pb-surfs-trip";
 const MAX_RESUME_MS = 8 * 3600 * 1000;
 
@@ -178,6 +178,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     if (mps >= SPEED_THRESHOLD_MPS) {
       // Doppler speed is steadier than raw position jumps; fall back to displacement.
       const add = hasSpeed ? mps * dt : d > Math.max(4, (acc as number) * 0.8) && d < 150 ? d : 0;
+      if (!hasSpeed && add === 0) last.current = prev;
       distRef.current += add;
     }
   }
