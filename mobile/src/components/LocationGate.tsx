@@ -88,18 +88,12 @@ export default function LocationGate() {
   }
 
   if (state === "ok") return null;
-  const off = state === "off";
-
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
       <View style={styles.backdrop}>
         <View style={styles.box}>
-          <Text style={styles.title}>{off ? "Turn on your location" : "Allow location access"}</Text>
-          <Text style={styles.msg}>
-            {off
-              ? "Your phone's location is switched off. Pointbreak needs it to find rides, drivers and measure trips. Tap the button to open your phone settings, turn Location on, then come back."
-              : "Pointbreak needs your location to find rides and drivers and to measure trips. Tap the button and choose Allow. If location still cannot be detected, your phone settings will open: allow Location for Pointbreak, then come back."}
-          </Text>
+          <Text style={styles.title}>Turn on your location</Text>
+          <Text style={styles.msg}>Pointbreak cannot detect your location. Tap the button to open your phone settings, turn Location on, then come back.</Text>
           <TouchableOpacity style={styles.primary} onPress={turnOn} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Checking…" : "Turn on location"}</Text>
           </TouchableOpacity>
