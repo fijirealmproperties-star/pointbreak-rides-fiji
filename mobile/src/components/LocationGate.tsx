@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import * as Location from "expo-location";
 import { colors, typography } from "../theme";
+import { useUpdateAvailable } from "../updateState";
 
 type State = "ok" | "denied" | "off";
 
@@ -40,6 +41,7 @@ export default function LocationGate() {
   const [state, setState] = useState<State>("ok");
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const updateAvailable = useUpdateAvailable();
 
   const recheck = useCallback(async () => {
     if (busyRef.current) return;
@@ -87,7 +89,8 @@ export default function LocationGate() {
     if (after !== "ok") openSettings(after === "off");
   }
 
-  if (state === "ok") return null;
+  // A pending update is shown first, in front of this prompt.
+  if (state === "ok" || updateAvailable) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => {}}>
       <View style={styles.backdrop}>
