@@ -79,6 +79,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
 
   const sub = useRef<(() => void) | null>(null);
   const lastFixAt = useRef(0);
+  const rawAt = useRef(0);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
   const last = useRef<{ lat: number; lng: number; t: number } | null>(null);
   const speedRef = useRef(0);
@@ -160,7 +161,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     try {
       await runLoop(rates);
     } catch {
-      Alert.alert("Location needed", "Allow location access so the meter can measure distance.");
+      setSaved("Location needed: allow location access in the browser or phone settings so the meter can measure distance.");
     }
   }
   async function runLoop(rates: Rate) {
@@ -181,7 +182,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       setFare(fareRef.current);
       setDistance(distRef.current);
       setSpeedKmh(speedRef.current);
-      setGpsAcc(lastFixAt.current && now - lastFixAt.current < 6000 ? accRef.current : null);
+      setGpsAcc(rawAt.current && now - rawAt.current < 6000 ? accRef.current : null);
       if (++tickCount.current % 5 === 0) persist();
     }, 1000);
 
@@ -194,6 +195,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       if (now - stamp > 10000) return;
       const acc = f.accuracy;
       accRef.current = acc ?? null;
+      rawAt.current = now;
       if (acc == null || acc <= 0 || acc > MAX_ACCURACY_M) return;
       lastFixAt.current = now;
       const prev = last.current;
@@ -218,11 +220,12 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
       }
     };
     lastFixAt.current = 0;
+    rawAt.current = 0;
     if (nativeGpsAvailable()) {
       // Android foreground service: keeps measuring with the screen off or the app in the background.
       const stop = await startNativeWatch(
         (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
-        (code) => { if (code === "NOT_AUTHORIZED") Alert.alert("Location needed", "Allow location access (Always) so the meter keeps measuring in the background."); }
+        (code) => { if (code === "NOT_AUTHORIZED") setSaved("Location needed: allow location access (Always) so the meter keeps measuring in the background."); }
       );
       if (runningRef.current) sub.current = stop;
       else stop();
@@ -357,7 +360,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         </View>
         <View style={styles.statBox}>
           <Text style={styles.statVal}>{speedKmh.toFixed(0)}</Text>
-          <Text style={styles.label}>{gpsAcc != null ? `km/h · GPS ±${Math.round(gpsAcc)}m` : isRunning ? "km/h · searching GPS…" : "km/h"}</Text>
+          <Text style={styles.label}>{gpsAcc != null ? `km/h · GPS ±${Math.round(gpsAcc)}m${gpsAcc > MAX_ACCURACY_M ? " (too weak)" : ""}` : isRunning ? "km/h · searching GPS…" : "km/h"}</Text>
         </View>
       </View>
 

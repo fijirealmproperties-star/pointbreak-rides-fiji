@@ -221,7 +221,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
         // Android foreground service: keeps measuring with the screen off or the app in the background.
         const stop = await startNativeWatch(
           (f) => onFix({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
-          (code) => { if (code === "NOT_AUTHORIZED") Alert.alert("Location needed", "Allow location access (Always) so the meter keeps measuring in the background."); }
+          (code) => { if (code === "NOT_AUTHORIZED") setNote("Location needed: allow location access (Always) so the meter keeps measuring in the background."); }
         );
         if (runningRef.current) sub.current = stop;
         else stop();
@@ -236,7 +236,7 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
       if (runningRef.current) sub.current = () => s.remove();
       else s.remove();
     } catch {
-      Alert.alert("Location needed", "Allow location access so the meter can measure distance.");
+      setNote("Location needed: allow location access in the browser or phone settings so the meter can measure distance.");
     }
   }
 
