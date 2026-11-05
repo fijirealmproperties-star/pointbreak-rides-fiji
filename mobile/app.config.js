@@ -34,7 +34,7 @@ module.exports = {
   expo: {
     name: "Pointbreak Fiji Rides",
     slug: "pointbreakfijirides",
-    version: "2.9.1",
+    version: "3.0.0",
     orientation: "portrait",
     userInterfaceStyle: "dark",
     scheme: "pointbreak-rides-fiji",
