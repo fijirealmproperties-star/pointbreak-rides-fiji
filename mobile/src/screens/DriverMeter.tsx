@@ -5,6 +5,7 @@ import { colors } from "../theme";
 import { getUser } from "../api";
 import RoadsideMeter from "../components/RoadsideMeter";
 import SurfsUpMeter from "../components/SurfsUpMeter";
+import { startMeterGps } from "../meterGps";
 
 export default function DriverMeter() {
   const insets = useSafeAreaInsets();
@@ -13,6 +14,27 @@ export default function DriverMeter() {
 
   useEffect(() => {
     getUser().then((u) => setDriverId(u?.driverProfile?.id || u?.id));
+  }, []);
+
+  // Keep the phone's GPS warm and the screen awake whenever a driver has the app open,
+  // so a meter starts with a lock already acquired and never waits for the first fix.
+  useEffect(() => {
+    const stopGps = startMeterGps(() => {}, () => {});
+    let lock: any = null;
+    const hold = async () => {
+      try {
+        const nav: any = typeof navigator !== "undefined" ? navigator : null;
+        if (nav?.wakeLock && document.visibilityState === "visible") lock = await nav.wakeLock.request("screen");
+      } catch {}
+    };
+    hold();
+    const onVis = () => { if (document.visibilityState === "visible") hold(); };
+    if (typeof document !== "undefined") document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stopGps();
+      try { lock?.release?.(); } catch {}
+      if (typeof document !== "undefined") document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
 
   return (
