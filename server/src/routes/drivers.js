@@ -173,5 +173,12 @@ module.exports = (db, matchingEngine) => {
     }
     res.json({ ok: true });
   });
+
+  router.get('/roadside-trips', (req, res) => {
+    const driver = driverFor(req.user.userId);
+    const id = driver ? driver.id : req.user.userId;
+    const trips = db.prepare("SELECT id, tariff_type, total_fare, trip_distance_km, trip_duration_seconds, created_at, ended_at FROM roadside_trips WHERE driver_id=? AND status='finished' ORDER BY id DESC LIMIT 200").all(id);
+    res.json({ trips });
+  });
   return router;
 };

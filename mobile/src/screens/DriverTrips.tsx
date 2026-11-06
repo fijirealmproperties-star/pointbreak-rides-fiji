@@ -19,10 +19,24 @@ type Stats = {
   cancelled_trips: number;
 };
 
+type MeterTrip = {
+  id: number;
+  tariff_type: string;
+  total_fare: number;
+  trip_distance_km: number | null;
+  trip_duration_seconds: number | null;
+  created_at: string;
+};
+
+const meterName = (t: string) => (t.startsWith("SURFS_UP") ? "Surfs Up Meter" : "Roadside Meter");
+
+type Row = { key: string; ride?: Ride; meter?: MeterTrip; ts: string };
+
 export default function DriverTrips() {
   const insets = useSafeAreaInsets();
   const [rides, setRides] = useState<Ride[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
+  const [meterTrips, setMeterTrips] = useState<MeterTrip[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -31,10 +45,12 @@ export default function DriverTrips() {
     if (refresh) setRefreshing(true);
     else setLoading(true);
     try {
-      const [d, s] = await Promise.all([
+      const [d, s, m] = await Promise.all([
         api<{ rides: Ride[] }>("/drivers/rides"),
         api<Stats>("/drivers/stats").catch(() => null),
+        api<{ trips: MeterTrip[] }>("/drivers/roadside-trips").catch(() => ({ trips: [] as MeterTrip[] })),
       ]);
+      setMeterTrips(m.trips || []);
       setRides(d.rides || []);
       if (s) setStats(s);
       setError("");
@@ -57,8 +73,9 @@ export default function DriverTrips() {
       ? completed.reduce((sum, r) => sum + (r.rating || 0), 0) / completed.filter((r) => r.rating).length
       : 0;
 
-  const statTrips = stats?.total_trips ?? rides.length;
-  const statEarnings = stats?.total_earnings ?? earnings;
+  const meterEarned = meterTrips.reduce((sum, t) => sum + (t.total_fare || 0), 0);
+  const statTrips = (stats?.total_trips ?? rides.length) + meterTrips.length;
+  const statEarnings = (stats?.total_earnings ?? earnings) + meterEarned;
   const statRating =
     stats?.average_rating != null
       ? stats.average_rating
@@ -76,13 +93,16 @@ export default function DriverTrips() {
     );
   }
 
-  const showCompleted = completed.length > 0 ? completed : rides;
+  const rows: Row[] = [
+    ...(completed.length > 0 ? completed : rides).map((r) => ({ key: "r" + r.id, ride: r, ts: r.requested_at })),
+    ...meterTrips.map((t) => ({ key: "m" + t.id, meter: t, ts: t.created_at })),
+  ].sort((a, b) => new Date(b.ts.replace(" ", "T") + (b.ts.includes("Z") || b.ts.includes("T") ? "" : "Z")).getTime() - new Date(a.ts.replace(" ", "T") + (a.ts.includes("Z") || a.ts.includes("T") ? "" : "Z")).getTime());
 
   return (
     <View style={[styles.screen, { paddingBottom: insets.bottom }]}>
       <FlatList
-        data={showCompleted}
-        keyExtractor={(r) => r.id}
+        data={rows}
+        keyExtractor={(r) => r.key}
         contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.ocean} />
@@ -123,7 +143,28 @@ export default function DriverTrips() {
             </Text>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item: row }) => {
+          if (row.meter) {
+            const t = row.meter;
+            const when = t.created_at.includes("T") ? t.created_at : t.created_at.replace(" ", "T") + "Z";
+            const mins = Math.round((t.trip_duration_seconds || 0) / 60);
+            return (
+              <View style={styles.card}>
+                <View style={styles.cardHead}>
+                  <Text style={styles.date}>{fmtDate(when)} ? {fmtTime(when)}</Text>
+                  <View style={[styles.badge, { borderColor: colors.ocean }]}>
+                    <Text style={[styles.badgeText, { color: colors.ocean }]}>{meterName(t.tariff_type)}</Text>
+                  </View>
+                </View>
+                <Text style={styles.places}>?? Meter trip</Text>
+                <View style={styles.cardFoot}>
+                  <Text style={styles.footLeft}>{(t.trip_distance_km ?? 0).toFixed(2)} km ? {mins} min</Text>
+                  <Text style={styles.fare}>{fmtFare(t.total_fare)}</Text>
+                </View>
+              </View>
+            );
+          }
+          const item = row.ride as Ride;
           const sc = statusColor(item.status);
           return (
             <View style={styles.card}>
