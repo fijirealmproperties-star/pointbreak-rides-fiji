@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pointbreak Rides Fiji — Admin</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=admin-login-1">
+  <link rel="stylesheet" href="styles.css?v=admin-login-2">
 </head>
 <body>
   <main id="admin-login-screen" class="login-screen">
@@ -14,10 +14,7 @@
       <h1>Pointbreak Fiji Rides</h1>
       <p class="login-subtitle">Admin sign in</p>
       <input id="adm-phone" class="reg-input" name="username" type="tel" placeholder="Admin phone" aria-label="Admin phone" autocomplete="username" required>
-      <span class="pw-wrap">
-        <input id="adm-password" class="reg-input" name="password" type="password" placeholder="Admin password" aria-label="Admin password" autocomplete="current-password" required>
-        <button id="adm-eye" class="login-eye" type="button" onclick="toggleAdminPw()" aria-label="Show password">👁️</button>
-      </span>
+      <input id="adm-password" class="reg-input" name="password" type="password" placeholder="Admin password" aria-label="Admin password" autocomplete="current-password" required>
       <label class="keep-me"><input type="checkbox" id="adm-keep" checked> Keep me logged in</label>
       <button id="admin-login-btn" class="reg-btn login-submit" type="submit">Sign in</button>
       <span class="register-status" id="admin-status" role="status" aria-live="polite"></span>
@@ -265,6 +262,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="app.js?v=admin-login-1"></script>
+  <script src="app.js?v=admin-login-2"></script>
 </body>
 </html>

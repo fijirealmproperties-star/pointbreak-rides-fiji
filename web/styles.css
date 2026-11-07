@@ -85,9 +85,6 @@ body {
 .login-card h1 { font-size: 1.45rem; text-align: center; }
 .login-subtitle { color: var(--text-secondary); text-align: center; margin-top: -10px; }
 .login-card .reg-input { width: 100%; }
-.login-card .pw-wrap { position: relative; display: block; width: 100%; }
-.login-card .pw-wrap input { padding-right: 50px; }
-.login-eye { position: absolute; right: 3px; top: 0; height: 100%; width: 42px; border: 0; background: transparent; cursor: pointer; font-size: 1.15rem; }
 .login-submit { width: 100%; }
 
 /* ---- Header ---- */

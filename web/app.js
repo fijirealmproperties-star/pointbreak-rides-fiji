@@ -124,15 +124,6 @@ async function adminLogin() {
   }
 }
 
-function toggleAdminPw() {
-  const input = document.getElementById('adm-password');
-  const eye = document.getElementById('adm-eye');
-  const show = input.type === 'password';
-  input.type = show ? 'text' : 'password';
-  eye.textContent = show ? '🙈' : '👁️';
-  eye.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
-}
-
 function adminLogout() {
   adminToken = null;
   adminUserName = null;
