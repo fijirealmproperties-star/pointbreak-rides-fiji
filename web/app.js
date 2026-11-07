@@ -294,6 +294,7 @@ async function viewAccount(id) {
   try {
     const { user, driver, rides: rs } = await acctApi('/users/' + encodeURIComponent(id));
     box.innerHTML = `<div class="register-section" style="margin:0">
+      <button type="button" class="reg-btn reg-btn-ghost" style="float:right" onclick="closeAccount()" aria-label="Close account details" title="Close account details">×</button>
       <h3 style="margin:0 0 6px">${escapeHtml(user.name)} · ${escapeHtml(user.role)}</h3>
       <div class="admin-hint">${escapeHtml(user.phone)} · joined ${escapeHtml((user.created_at || '').slice(0, 10))}
       ${user.suspended ? ' · ⛔ Suspended: ' + escapeHtml(user.suspended_reason || 'no reason given') : ''}
@@ -307,6 +308,10 @@ async function viewAccount(id) {
   } catch (e) { acctMsg(e.message, false); }
 }
 
+function closeAccount() {
+  document.getElementById('acct-detail').innerHTML = '';
+}
+
 const DOC_NAMES = { national_id: 'National ID', tin: 'TIN ID', voters_card: "Voter's card", passport: 'Passport', drivers_licence: "Driver's licence" };
 
 async function loadDocs(userId) {
@@ -316,7 +321,7 @@ async function loadDocs(userId) {
     const { documents } = await acctApi('/users/' + encodeURIComponent(userId) + '/documents');
     if (!documents.length) { box.innerHTML = '<h4 style="margin:10px 0 4px">ID documents</h4><div class="admin-hint">None uploaded.</div>'; return; }
     box.innerHTML = '<h4 style="margin:10px 0 4px">ID documents</h4><div id="doc-grid" style="display:flex;flex-wrap:wrap;gap:10px"></div>';
-    const grid = document.getElementById('doc-grid');
+    const grid = box.querySelector('#doc-grid');
     for (const d of documents) {
       const res = await fetch(`${API_URL}/api/admin/documents/${encodeURIComponent(d.id)}`, { headers: { Authorization: 'Bearer ' + adminToken } });
       if (!res.ok) continue;
