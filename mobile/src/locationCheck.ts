@@ -1,9 +1,12 @@
 export type LocationState = "ok" | "denied" | "off" | "unavailable";
 
+export function shouldWarnLocation(state: LocationState | "checking"): boolean {
+  return state === "denied" || state === "off";
+}
+
 type NativeLocation = {
   getForegroundPermissionsAsync: () => Promise<{ status: string }>;
   hasServicesEnabledAsync: () => Promise<boolean>;
-  getCurrentPositionAsync: () => Promise<{ coords: { latitude: number; longitude: number } }>;
 };
 
 function validPosition(latitude: number, longitude: number): boolean {
@@ -32,8 +35,7 @@ export async function checkLocation(
     const permission = await nativeLocation.getForegroundPermissionsAsync();
     if (permission.status !== "granted") return "denied";
     if (!(await nativeLocation.hasServicesEnabledAsync())) return "off";
-    const position = await nativeLocation.getCurrentPositionAsync();
-    return validPosition(position.coords.latitude, position.coords.longitude) ? "ok" : "unavailable";
+    return "ok";
   };
 
   let timer: ReturnType<typeof setTimeout> | undefined;

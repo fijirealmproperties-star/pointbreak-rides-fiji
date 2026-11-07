@@ -3,7 +3,7 @@ import { AppState, Linking, Modal, View, Text, TouchableOpacity, StyleSheet, Pla
 import * as Location from "expo-location";
 import { colors, typography } from "../theme";
 import { useUpdateAvailable } from "../updateState";
-import { checkLocation, LocationState } from "../locationCheck";
+import { checkLocation, LocationState, shouldWarnLocation } from "../locationCheck";
 
 function check() {
   const geo = typeof navigator !== "undefined" ? navigator.geolocation : null;
@@ -80,13 +80,13 @@ export default function LocationGate() {
   }
 
   // A pending update is shown first, in front of this prompt.
-  if (state === "ok" || state === "checking" || updateAvailable || Date.now() < hiddenUntil) return null;
+  if (!shouldWarnLocation(state) || updateAvailable || Date.now() < hiddenUntil) return null;
   return (
     <Modal visible transparent animationType="fade" onRequestClose={() => setHiddenUntil(Date.now() + 5 * 60 * 1000)}>
       <View style={styles.backdrop}>
         <View style={styles.box}>
           <Text style={styles.title}>Turn on your location</Text>
-          <Text style={styles.msg}>Pointbreak needs your location to work. Turn on your phone's location and allow location access for this app or website. The warning will close when your location is detected.</Text>
+          <Text style={styles.msg}>Pointbreak needs your location to work. Turn on your phone's location and allow location access for this app or website.</Text>
           <TouchableOpacity style={styles.primary} onPress={turnOn} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Checking…" : "Check location again"}</Text>
           </TouchableOpacity>

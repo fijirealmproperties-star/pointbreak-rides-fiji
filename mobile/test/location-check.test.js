@@ -12,12 +12,11 @@ const loaded = new Module(filename, module);
 loaded.filename = filename;
 loaded.paths = module.paths;
 loaded._compile(compiled, filename);
-const { checkLocation } = loaded.exports;
+const { checkLocation, shouldWarnLocation } = loaded.exports;
 
 const native = {
   getForegroundPermissionsAsync: async () => ({ status: "granted" }),
   hasServicesEnabledAsync: async () => true,
-  getCurrentPositionAsync: async () => ({ coords: { latitude: -17.8, longitude: 177.4 } }),
 };
 
 test("web warning clears only after a fresh location is detected", async () => {
@@ -44,9 +43,23 @@ test("missing, unavailable, invalid, and timed-out web locations do not report s
   assert.equal(await checkLocation("web", { getCurrentPosition: () => {} }, native, 5), "unavailable");
 });
 
-test("native permission, services, and an actual position are checked", async () => {
+test("native permission and location services are checked without requiring a GPS fix", async () => {
   assert.equal(await checkLocation("android", null, { ...native, getForegroundPermissionsAsync: async () => ({ status: "undetermined" }) }), "denied");
   assert.equal(await checkLocation("android", null, { ...native, hasServicesEnabledAsync: async () => false }), "off");
-  assert.equal(await checkLocation("android", null, { ...native, getCurrentPositionAsync: async () => { throw new Error("GPS failed"); } }), "unavailable");
   assert.equal(await checkLocation("android", null, native), "ok");
+});
+
+test("the warning is shown only when permission is denied or services are off", () => {
+  for (const state of ["denied", "off"]) assert.equal(shouldWarnLocation(state), true, state);
+  for (const state of ["checking", "ok", "unavailable"]) assert.equal(shouldWarnLocation(state), false, state);
+});
+
+test("a temporary web GPS failure clears the warning instead of making it reappear", async () => {
+  let code = 1;
+  const geo = { getCurrentPosition: (_, error) => error({ code }) };
+  assert.equal(shouldWarnLocation(await checkLocation("web", geo, native)), true);
+  code = 2;
+  assert.equal(shouldWarnLocation(await checkLocation("web", geo, native)), false);
+  code = 3;
+  assert.equal(shouldWarnLocation(await checkLocation("web", geo, native)), false);
 });
