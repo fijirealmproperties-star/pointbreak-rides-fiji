@@ -49,15 +49,20 @@ class SQLiteWrapper {
     const wrapper = this;
     return {
       run(...params) {
+        let changes = 0;
+        let lastInsertRowid;
         try {
           db.run(sql, params);
+          changes = db.getRowsModified();
+          const result = db.exec('SELECT last_insert_rowid() AS id');
+          lastInsertRowid = result[0].values[0][0];
           wrapper._save();
         } catch (e) {
           if (!sql.includes('OR IGNORE')) {
             console.error('SQL run error:', e.message, sql.substring(0, 80));
           }
         }
-        return { changes: db.getRowsModified() };
+        return { changes, lastInsertRowid };
       },
       get(...params) {
         try {

@@ -145,6 +145,7 @@ module.exports = (db, matchingEngine) => {
     db.prepare("UPDATE roadside_trips SET status='finished', ended_at=datetime('now') WHERE driver_id=? AND status='running'").run(driver.id);
     const info = db.prepare("INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, status) VALUES (?, ?, 0, 'running')")
       .run(driver.id, tariff_type);
+    if (!info.changes || !info.lastInsertRowid) return res.status(500).json({ error: 'Could not start meter trip' });
     db.prepare("UPDATE drivers SET status='offline' WHERE id=?").run(driver.id);
     matchingEngine.unregisterDriverById(driver.id);
     matchingEngine.broadcastDrivers();
@@ -161,6 +162,9 @@ module.exports = (db, matchingEngine) => {
     const driverId = driver ? driver.id : req.user.userId;
     const secs = Math.max(0, Math.round(Number(trip_duration_seconds) || 0));
     const km = Math.max(0, Number(trip_distance_km) || 0);
+    if (trip_id && db.prepare("SELECT id FROM roadside_trips WHERE id=? AND driver_id=? AND status='finished'").get(trip_id, driverId)) {
+      return res.json({ ok: true });
+    }
     const open = trip_id
       ? db.prepare("SELECT id FROM roadside_trips WHERE id=? AND driver_id=? AND status='running'").get(trip_id, driverId)
       : null;

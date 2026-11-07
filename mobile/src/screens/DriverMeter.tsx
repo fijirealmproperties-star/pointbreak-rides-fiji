@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { colors } from "../theme";
 import { getUser } from "../api";
 import RoadsideMeter from "../components/RoadsideMeter";
@@ -10,10 +11,14 @@ import { startMeterGps } from "../meterGps";
 export default function DriverMeter() {
   const insets = useSafeAreaInsets();
   const [driverId, setDriverId] = useState<string | undefined>();
-  const [mode, setMode] = useState<"classic" | "surf">("classic");
+  const [legacyTrip, setLegacyTrip] = useState<boolean | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     getUser().then((u) => setDriverId(u?.driverProfile?.id || u?.id));
+    AsyncStorage.getItem("pb-active-trip")
+      .then((trip) => setLegacyTrip(!!trip))
+      .catch(() => setError("Could not check for an unfinished meter trip. Please restart the app and try again."));
   }, []);
 
   // Keep the phone's GPS warm and the screen awake whenever a driver has the app open,
@@ -40,16 +45,16 @@ export default function DriverMeter() {
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 12 }]}>
       <ScrollView contentContainerStyle={{ padding: 16 }}>
-        <View style={styles.tabs}>
-          {([["classic", "Roadside Meter"], ["surf", "Surfs Up Meter"]] as const).map(([k, label]) => (
-            <TouchableOpacity key={k} style={[styles.tab, mode === k && styles.tabOn]} onPress={() => setMode(k)}>
-              <Text style={[styles.tabText, mode === k && styles.tabTextOn]}>{label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        {/* Both stay mounted so a running trip is never lost when switching tabs. */}
-        <View style={mode === "classic" ? undefined : { display: "none" }}><RoadsideMeter driverId={driverId} /></View>
-        <View style={mode === "surf" ? undefined : { display: "none" }}><SurfsUpMeter driverId={driverId} /></View>
+        {error ? <Text style={{ color: colors.coral }}>{error}</Text>
+          : legacyTrip === null ? <ActivityIndicator color={colors.ocean} />
+          : legacyTrip ? (
+            <>
+              <Text style={{ color: colors.text, marginBottom: 12 }}>
+                Finish your existing Roadside Meter trip before switching to Surfs Up Meter.
+              </Text>
+              <RoadsideMeter driverId={driverId} retiring onRetiredTripFinished={() => setLegacyTrip(false)} />
+            </>
+          ) : <SurfsUpMeter driverId={driverId} />}
       </ScrollView>
     </View>
   );
@@ -57,9 +62,4 @@ export default function DriverMeter() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.deep },
-  tabs: { flexDirection: "row", marginBottom: 12, backgroundColor: "#222", borderRadius: 10, padding: 4 },
-  tab: { flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: "center" },
-  tabOn: { backgroundColor: "#ffcc00" },
-  tabText: { color: "#aaa", fontWeight: "bold" },
-  tabTextOn: { color: "#000" },
 });

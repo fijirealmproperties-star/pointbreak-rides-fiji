@@ -65,7 +65,11 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 const formatTime = (s: number) =>
   `${Math.floor(s / 60).toString().padStart(2, "0")}:${(s % 60).toString().padStart(2, "0")}`;
 
-export default function RoadsideMeter({ driverId }: { driverId?: string }) {
+export default function RoadsideMeter({ driverId, retiring = false, onRetiredTripFinished }: {
+  driverId?: string;
+  retiring?: boolean;
+  onRetiredTripFinished?: () => void;
+}) {
   const [region, setRegion] = useState<Region>("VITI_LEVU");
   const [period, setPeriod] = useState<Period>(autoPeriod);
   const [isRunning, setIsRunning] = useState(false);
@@ -77,6 +81,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
   const [seconds, setSeconds] = useState(0);
   const [saved, setSaved] = useState<string | null>(null);
   const [lastTotal, setLastTotal] = useState<number | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const sub = useRef<(() => void) | null>(null);
   const lastFixAt = useRef(0);
@@ -248,10 +253,13 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         const raw = await AsyncStorage.getItem(TRIP_KEY);
         if (!raw || timer.current || runningRef.current) return;
         const s = JSON.parse(raw);
-        if (!s || Date.now() - s.at > 6 * 3600 * 1000) { await AsyncStorage.removeItem(TRIP_KEY); return; }
+        if (!s || (!retiring && Date.now() - s.at > 6 * 3600 * 1000)) { await AsyncStorage.removeItem(TRIP_KEY); onRetiredTripFinished?.(); return; }
         if (!nativeGpsAvailable()) {
           const perm = await Location.requestForegroundPermissionsAsync();
-          if (perm.status !== "granted") return;
+          if (perm.status !== "granted") {
+            setSaved("Allow location access to resume your unfinished trip.");
+            return;
+          }
         }
         tripId.current = s.tripId ?? null;
         regionRef.current = s.region; periodRef.current = s.period;
@@ -266,10 +274,49 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
         setSaved("You are now offline. Switch Online on the Home tab when the trip is done.");
         setIsRunning(true);
         await runLoop(rates);
-      } catch {}
+      } catch {
+        setSaved("Could not restore the unfinished trip. Please restart the app and try again.");
+      }
     })();
   }, []);
   async function stopMeter() {
+    if (retiring) {
+      if (saving) return;
+      runningRef.current = false;
+      if (timer.current) clearInterval(timer.current);
+      sub.current?.();
+      releaseWake();
+      setSaving(true);
+      setSaved("Saving your trip...");
+      try {
+        const tariff = isAirport(regionRef.current) ? regionRef.current : `${regionRef.current}_${periodRef.current}`;
+        let id = tripId.current ?? await startReq.current;
+        if (id == null) {
+          const started = await api<{ trip_id?: number }>("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariff } });
+          if (typeof started.trip_id !== "number") throw new Error("The server did not return a meter trip ID");
+          id = started.trip_id;
+          tripId.current = id;
+        }
+        await AsyncStorage.setItem(TRIP_KEY, JSON.stringify({
+          tripId: id, region: regionRef.current, period: periodRef.current,
+          fare: fareRef.current, dist: distRef.current, sec: secRef.current, at: Date.now(),
+        }));
+        await api("/drivers/roadside", { method: "POST", body: {
+          trip_id: id,
+          tariff_type: tariff,
+          total_fare: Number(fareRef.current.toFixed(2)),
+          trip_duration_seconds: Math.round(secRef.current),
+          trip_distance_km: Number(distRef.current.toFixed(2)),
+        } });
+        await AsyncStorage.removeItem(TRIP_KEY);
+        onRetiredTripFinished?.();
+      } catch {
+        setSaved("Could not save your trip. Check your connection and tap End Trip to retry.");
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
     runningRef.current = false;
     setIsRunning(false);
     if (timer.current) clearInterval(timer.current);
@@ -309,7 +356,7 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
     <View style={styles.container}>
       <Text style={styles.title}>Roadside Meter</Text>
 
-      <View style={[isRunning && { opacity: 0.5 }]} pointerEvents={isRunning ? "none" : "auto"}>
+      <View style={[(isRunning || retiring) && { opacity: 0.5 }]} pointerEvents={isRunning || retiring ? "none" : "auto"}>
         <View style={styles.row}>
           {REGIONS.slice(0, 2).map((x) => (
             <TouchableOpacity key={x.key} style={[styles.tariffBtn, region === x.key && styles.activeBtn]} onPress={() => pick(x.key, period)}>
@@ -357,9 +404,10 @@ export default function RoadsideMeter({ driverId }: { driverId?: string }) {
 
       <TouchableOpacity
         style={[styles.actionButton, isRunning ? styles.stopBg : styles.startBg]}
-        onPress={isRunning ? stopMeter : startMeter}
+        onPress={isRunning || retiring ? stopMeter : startMeter}
+        disabled={saving || (retiring && !isRunning)}
       >
-        <Text style={styles.actionText}>{isRunning ? "END TRIP" : "START TRIP"}</Text>
+        <Text style={styles.actionText}>{saving ? "SAVING..." : isRunning || retiring ? "END TRIP" : "START TRIP"}</Text>
       </TouchableOpacity>
 
       {lastTotal !== null && !isRunning ? (
