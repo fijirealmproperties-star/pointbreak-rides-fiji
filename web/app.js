@@ -219,6 +219,36 @@ function acctMsg(text, ok) {
   s.className = 'register-status ' + (ok ? 'ok' : 'error');
 }
 
+async function createRiderAccount(event) {
+  event.preventDefault();
+  const status = document.getElementById('new-rider-status');
+  const button = document.getElementById('new-rider-submit');
+  if (!adminToken) {
+    status.textContent = 'Sign in as admin first';
+    status.className = 'register-status error';
+    return;
+  }
+  const name = document.getElementById('new-rider-name').value.trim();
+  const phone = document.getElementById('new-rider-phone').value.trim();
+  const password = document.getElementById('new-rider-password').value;
+  button.disabled = true;
+  status.textContent = 'Creating account…';
+  status.className = 'register-status';
+  try {
+    const data = await acctApi('/users', 'POST', { name, phone, password });
+    status.textContent = `Rider ${data.user.name} created. They can sign in with ${data.user.phone} and the password you set.`;
+    status.className = 'register-status ok';
+    event.target.reset();
+    await loadAccounts();
+    loadCounts();
+  } catch (e) {
+    status.textContent = e.message || 'Could not create account';
+    status.className = 'register-status error';
+  } finally {
+    button.disabled = false;
+  }
+}
+
 async function loadAccounts() {
   if (!adminToken) return;
   try {

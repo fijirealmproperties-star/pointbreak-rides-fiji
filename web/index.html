@@ -173,6 +173,21 @@
     </div>
   </section>
 
+  <section class="register-section" data-tab="users">
+    <div class="section-header">
+      <h2>Register Rider</h2>
+      <span id="new-rider-status" class="register-status" role="status" aria-live="polite"></span>
+    </div>
+    <p class="admin-hint">Manually created riders can sign in immediately with their phone and password. No ID document or email is collected here; verify their identity separately.</p>
+    <form class="register-row" onsubmit="createRiderAccount(event)">
+      <input id="new-rider-name" class="reg-input" placeholder="Full name" aria-label="Full name" required autocomplete="off" />
+      <input id="new-rider-phone" class="reg-input" type="tel" placeholder="Phone (e.g. +679…)" aria-label="Phone" required autocomplete="off" />
+      <input id="new-rider-password" class="reg-input" type="password" placeholder="Password (at least 8 characters)" aria-label="Password" required minlength="8" autocomplete="new-password" />
+      <button id="new-rider-submit" class="reg-btn" type="submit">Create rider</button>
+    </form>
+    <p class="admin-hint">Share passwords privately.</p>
+  </section>
+
   <section class="register-section" id="accounts" data-tab="users">
     <div class="section-header">
       <h2>👥 Accounts</h2>

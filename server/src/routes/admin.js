@@ -166,6 +166,37 @@ module.exports = (db, matchingEngine) => {
     res.json({ users });
   });
 
+  router.post('/users', async (req, res) => {
+    try {
+      const { name, phone, password } = req.body || {};
+      if (typeof name !== 'string' || !name.trim() || typeof phone !== 'string' || !phone.trim() ||
+          typeof password !== 'string' || password.length < 8) {
+        return res.status(400).json({ error: 'Name, phone and a password of at least 8 characters are required' });
+      }
+      const cleanName = name.trim();
+      const cleanPhone = phone.trim();
+      if (db.prepare('SELECT id FROM users WHERE phone=?').get(cleanPhone)) {
+        return res.status(409).json({ error: 'Phone number already registered' });
+      }
+      const id = uuidv4();
+      const hash = await bcrypt.hash(password, 10);
+      db.prepare('INSERT INTO users (id, name, phone, password_hash, role, email, email_verified) VALUES (?,?,?,?,?,?,0)')
+        .run(id, cleanName, cleanPhone, hash, 'rider', null);
+      const user = db.prepare('SELECT id, name, phone, role FROM users WHERE id=?').get(id);
+      if (!user) {
+        if (db.prepare('SELECT id FROM users WHERE phone=?').get(cleanPhone)) {
+          return res.status(409).json({ error: 'Phone number already registered' });
+        }
+        console.error('Failed to persist admin-created rider account');
+        return res.status(500).json({ error: 'Failed to create account' });
+      }
+      res.status(201).json({ user });
+    } catch (err) {
+      console.error('Failed to create rider account:', err);
+      res.status(500).json({ error: 'Failed to create account' });
+    }
+  });
+
   // ID documents uploaded at sign-up (metadata list, then the file itself).
   router.get('/users/:id/documents', (req, res) => {
     const docs = db.prepare('SELECT id, doc_type, mime, size, created_at FROM user_documents WHERE user_id=? ORDER BY created_at').all(req.params.id);
