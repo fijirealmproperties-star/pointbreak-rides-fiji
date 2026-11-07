@@ -56,25 +56,33 @@ document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
   renderAdminState();
-  await loadInitialData();
-  connectSocket();
+  if (adminToken && adminUserName) await startDashboard();
   setInterval(pollData, 5000);
 }
 
+async function startDashboard() {
+  if (!socket) connectSocket();
+  await loadInitialData();
+  if (typeof liveMap !== 'undefined' && liveMap) setTimeout(() => liveMap.invalidateSize(), 50);
+}
+
 function renderAdminState() {
-  const auth = document.getElementById('admin-auth');
+  const loginScreen = document.getElementById('admin-login-screen');
+  const dashboard = document.getElementById('admin-dashboard');
   const bar = document.getElementById('admin-bar');
   const nameEl = document.getElementById('admin-name');
   const status = document.getElementById('admin-status');
 
-  if (adminToken && adminUserName) {
-    if (auth) auth.style.display = 'none';
+  const signedIn = !!(adminToken && adminUserName);
+  loginScreen.hidden = signedIn;
+  dashboard.hidden = !signedIn;
+  if (signedIn) {
     if (bar) { bar.style.display = 'flex'; nameEl.textContent = adminUserName; }
-    if (status) { status.textContent = 'Signed in as admin'; status.className = 'register-status ok'; }
+    if (status) { status.textContent = ''; status.className = 'register-status'; }
   } else {
-    if (auth) auth.style.display = 'flex';
     if (bar) bar.style.display = 'none';
-    if (status) { status.textContent = 'Sign in with the admin account first'; status.className = 'register-status'; }
+    if (status) { status.textContent = ''; status.className = 'register-status'; }
+    if (socket) { socket.disconnect(); socket = null; }
   }
 }
 
@@ -82,9 +90,11 @@ async function adminLogin() {
   const phone = document.getElementById('adm-phone').value.trim();
   const password = document.getElementById('adm-password').value;
   const status = document.getElementById('admin-status');
+  const button = document.getElementById('admin-login-btn');
 
   if (!phone || !password) { status.textContent = 'Enter admin phone and password'; status.className = 'register-status error'; return; }
 
+  button.disabled = true;
   try {
     const res = await fetch(`${API_URL}/api/auth/login`, {
       method: 'POST',
@@ -103,12 +113,14 @@ async function adminLogin() {
     localStorage.setItem('pb_admin_keep', keepBox && !keepBox.checked ? '0' : '1');
     sessionStorage.setItem('pb_admin_sess', '1');
     renderAdminState();
-    loadCounts();
     document.getElementById('adm-phone').value = '';
     document.getElementById('adm-password').value = '';
+    await startDashboard();
   } catch (e) {
     status.textContent = 'Could not reach the server';
     status.className = 'register-status error';
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -578,6 +590,7 @@ function connectSocket() {
 }
 
 async function pollData() {
+  if (!adminToken || !adminUserName) return;
   loadCounts();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};

@@ -5,9 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pointbreak Rides Fiji — Admin</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=admin-login-1">
 </head>
 <body>
+  <main id="admin-login-screen" class="login-screen">
+    <form id="admin-auth" class="login-card" onsubmit="adminLogin();return false">
+      <img class="login-logo" src="pointbreak-logo.png" alt="Pointbreak surfer riding a car on a wave">
+      <h1>Pointbreak Fiji Rides</h1>
+      <p class="login-subtitle">Admin sign in</p>
+      <input id="adm-phone" class="reg-input" name="username" type="tel" placeholder="Admin phone" aria-label="Admin phone" autocomplete="username" required>
+      <span class="pw-wrap">
+        <input id="adm-password" class="reg-input" name="password" type="password" placeholder="Admin password" aria-label="Admin password" autocomplete="current-password" required>
+        <button id="adm-eye" class="login-eye" type="button" onclick="toggleAdminPw()" aria-label="Show password">👁️</button>
+      </span>
+      <label class="keep-me"><input type="checkbox" id="adm-keep" checked> Keep me logged in</label>
+      <button id="admin-login-btn" class="reg-btn login-submit" type="submit">Sign in</button>
+      <span class="register-status" id="admin-status" role="status" aria-live="polite"></span>
+    </form>
+  </main>
+  <div id="admin-dashboard" hidden>
   <header>
     <div class="header-left">
       <h1>Pointbreak Rides Fiji</h1>
@@ -83,16 +99,6 @@
   <section class="admin-section">
     <div class="section-header">
       <h2>Admin</h2>
-      <span class="register-status" id="admin-status"></span>
-    </div>
-    <div id="admin-auth" class="admin-auth">
-      <input id="adm-phone" class="reg-input" name="username" placeholder="Admin phone (e.g. +679…)" autocomplete="username" />
-      <span class="pw-wrap">
-        <input id="adm-password" class="reg-input" name="password" type="password" placeholder="Admin password" autocomplete="current-password" onkeydown="if(event.key==='Enter')adminLogin()" />
-      </span>
-      <label class="keep-me"><input type="checkbox" id="adm-keep" checked /> Keep me logged in</label>
-      <button class="reg-btn" onclick="adminLogin()">Sign in</button>
-      <span class="admin-hint">Use the admin account created during setup (ADMIN_PHONE / ADMIN_PASSWORD).</span>
     </div>
     <div id="admin-bar" class="admin-bar" style="display:none">
       <span id="admin-name" class="admin-name"></span>
@@ -255,9 +261,10 @@
       </div>
     </aside>
   </main>
+  </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="app.js"></script>
+  <script src="app.js?v=admin-login-1"></script>
 </body>
 </html>

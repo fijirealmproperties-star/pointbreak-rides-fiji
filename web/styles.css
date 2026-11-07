@@ -49,6 +49,47 @@ body {
   min-height: 100vh;
 }
 
+[hidden] { display: none !important; }
+
+.login-screen {
+  display: flex;
+  min-height: 100vh;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: radial-gradient(circle at 50% 15%, #103d65, var(--bg-body) 65%);
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 30px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: var(--shadow);
+}
+
+.login-logo {
+  display: block;
+  width: 150px;
+  height: 150px;
+  object-fit: cover;
+  border-radius: 24px;
+  align-self: center;
+}
+
+.login-card h1 { font-size: 1.45rem; text-align: center; }
+.login-subtitle { color: var(--text-secondary); text-align: center; margin-top: -10px; }
+.login-card .reg-input { width: 100%; }
+.login-card .pw-wrap { position: relative; display: block; width: 100%; }
+.login-card .pw-wrap input { padding-right: 50px; }
+.login-eye { position: absolute; right: 3px; top: 0; height: 100%; width: 42px; border: 0; background: transparent; cursor: pointer; font-size: 1.15rem; }
+.login-submit { width: 100%; }
+
 /* ---- Header ---- */
 
 header {
