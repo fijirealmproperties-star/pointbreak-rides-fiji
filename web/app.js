@@ -271,9 +271,9 @@ function renderAccounts() {
     return !q || [u.name, u.phone, u.email, u.license_plate, u.vehicle_model].some(v => (v || '').toLowerCase().includes(q));
   });
   if (!list.length) { box.innerHTML = '<p class="empty">No accounts match.</p>'; return; }
-  box.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
+  const table = rows => '<table style="width:100%;border-collapse:collapse;font-size:13px">' +
     '<tr style="text-align:left"><th>Name</th><th>Phone</th><th>Email</th><th>Role</th><th>Trips</th><th>Cancelled</th><th>Joined</th><th>Status</th><th></th></tr>' +
-    list.map(u => {
+    rows.map(u => {
       const trips = u.role === 'driver' ? u.rides_as_driver : u.rides_as_rider;
       const id = escapeHtml(u.id);
       return `<tr style="border-top:1px solid #2a2f3a">
@@ -290,6 +290,9 @@ function renderAccounts() {
         <button class="reg-btn reg-btn-ghost" onclick="toggleSuspend('${id}')">${u.suspended ? 'Restore' : 'Suspend'}</button>
         <button class="reg-btn" style="background:#c0392b" onclick="deleteAccount('${id}')">Delete</button></td></tr>`;
     }).join('') + '</table>';
+  const groups = [['🚕 Drivers', list.filter(u => u.role === 'driver')], ['🏄 Riders', list.filter(u => u.role !== 'driver')]];
+  box.innerHTML = groups.filter(g => g[1].length).map(g =>
+    `<h3 style="margin:14px 0 6px">${g[0]} (${g[1].length})</h3>` + table(g[1])).join('');
 }
 
 async function viewAccount(id) {
