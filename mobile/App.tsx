@@ -137,7 +137,7 @@ function ProfileScreen({ user, onLogout }: { user: User; onLogout: () => void })
       <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
         <Text style={styles.logoutText}>Logout</Text>
       </TouchableOpacity>
-      <Text style={styles.surfTag}>Version 3.7.7</Text>
+      <Text style={styles.surfTag}>Version 3.7.8</Text>
       <Text style={styles.surfTag}>
         🌊 Ride the wave · Pointbreak Fiji Rides · surf responsibly
       </Text>

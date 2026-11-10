@@ -1,34 +1,8 @@
 import { api } from "./api";
+import { isNativeApp, nativePlugin, PluginListener } from "./nativeBridge";
 
 type PushResult = { ok: boolean; reason?: string; token?: string };
-type Listener = { remove(): Promise<void> };
-type PushPlugin = {
-  checkPermissions(): Promise<{ receive: string }>;
-  requestPermissions(): Promise<{ receive: string }>;
-  addListener(event: string, callback: (value: { value?: string; error?: string }) => void): Promise<Listener>;
-  register(): Promise<void>;
-};
-type CapacitorBridge = {
-  isNativePlatform(): boolean;
-  isPluginAvailable(name: string): boolean;
-  registerPlugin<T>(name: string): T;
-};
-
-function bridge(): CapacitorBridge | undefined {
-  return (globalThis as typeof globalThis & { Capacitor?: CapacitorBridge }).Capacitor;
-}
-
-export function isNativeApp(): boolean {
-  return !!bridge()?.isNativePlatform();
-}
-
-let cachedPlugin: PushPlugin | null = null;
-function plugin(): PushPlugin | null {
-  const cap = bridge();
-  if (!cap?.isNativePlatform() || !cap.isPluginAvailable("PushNotifications")) return null;
-  if (!cachedPlugin) cachedPlugin = cap.registerPlugin<PushPlugin>("PushNotifications");
-  return cachedPlugin;
-}
+export { isNativeApp };
 
 let registration: Promise<PushResult> | null = null;
 
@@ -39,10 +13,10 @@ export function registerNativePush(requestPermission = true): Promise<PushResult
 }
 
 async function register(requestPermission: boolean): Promise<PushResult> {
-  const listeners: Listener[] = [];
+  const listeners: PluginListener[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    const p = plugin();
+    const p = nativePlugin("PushNotifications");
     if (!p) return { ok: false, reason: "App notifications are unavailable. Install the latest Pointbreak Android app." };
     let permission = await p.checkPermissions();
     if (permission.receive !== "granted" && requestPermission) permission = await p.requestPermissions();

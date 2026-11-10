@@ -1,3 +1,5 @@
+import { nativePlugin } from "./nativeBridge";
+
 // Native (Android) GPS through a foreground service. It reads the phone's GNSS chip
 // directly, needs no mobile data, and keeps running with the screen off.
 export type NativeFix = {
@@ -9,13 +11,12 @@ export type NativeFix = {
 };
 
 export function nativeGpsAvailable(): boolean {
-  const cap = (globalThis as any).Capacitor;
-  return !!(cap && cap.isNativePlatform && cap.isNativePlatform() && cap.registerPlugin);
+  return !!nativePlugin("BackgroundGeolocation");
 }
 
-let plugin: any = null;
 function getPlugin() {
-  if (!plugin) plugin = (globalThis as any).Capacitor.registerPlugin("BackgroundGeolocation");
+  const plugin = nativePlugin("BackgroundGeolocation");
+  if (!plugin) throw new Error("Background GPS plugin is unavailable.");
   return plugin;
 }
 
@@ -39,7 +40,7 @@ async function ensureWatcher(): Promise<void> {
         stale: false,
         distanceFilter: 0,
       },
-      (loc: any, err: any) => {
+      (loc, err) => {
         if (err) { const c = err.code || "ERROR"; subs.forEach((s) => s.onError(c)); return; }
         if (loc) subs.forEach((s) => s.onFix(loc as NativeFix));
       }
@@ -56,7 +57,7 @@ function releaseWatcher() {
   if (!watcherId) return;
   const id = watcherId;
   watcherId = null;
-  try { getPlugin().removeWatcher({ id }); } catch {}
+  getPlugin().removeWatcher({ id }).catch(error => console.warn("Could not stop background GPS:", error));
 }
 
 // Returns a stop function. Throws if the native side can't start.

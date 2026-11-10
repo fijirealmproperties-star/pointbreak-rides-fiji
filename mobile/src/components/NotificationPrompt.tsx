@@ -3,20 +3,15 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from "react
 import { api, getUser } from "../api";
 import { enablePush, pushSupported } from "../push";
 import { isNativeApp, registerNativePush } from "../nativePush";
+import { nativePlugin } from "../nativeBridge";
 import { colors, typography } from "../theme";
 
 const isWeb = Platform.OS === "web" && typeof window !== "undefined";
 const SEEN_KEY = "pb-notice-seen";
 const ASKED_KEY = "pb-notif-asked";
 
-export function nativeNotifs(): any | null {
-  const cap = (globalThis as any).Capacitor;
-  if (!cap?.isNativePlatform?.()) return null;
-  try {
-    return cap.isPluginAvailable("LocalNotifications") ? cap.registerPlugin("LocalNotifications") : null;
-  } catch {
-    return null;
-  }
+export function nativeNotifs() {
+  return nativePlugin("LocalNotifications");
 }
 
 export async function permissionState(): Promise<"granted" | "denied" | "ask" | "unsupported"> {
