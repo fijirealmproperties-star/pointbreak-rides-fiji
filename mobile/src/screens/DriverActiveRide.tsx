@@ -230,6 +230,8 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         }).catch((e: any) => setLocationError(e.message || "Could not update your location."));
       },
       (e) => setLocationError(e.message),
+      250,
+      true,
     );
   }, [rideId, !!ride, status]);
 

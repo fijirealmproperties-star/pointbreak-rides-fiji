@@ -64,7 +64,8 @@ function hasBrowserGeolocation(): boolean {
 export function watchCurrentLocation(
   emitPosition: (position: CurrentLocation) => void,
   onError?: (error: Error) => void,
-  maximumAccuracy = 250
+  maximumAccuracy = 250,
+  emitStationary = false
 ): () => void {
   // Smooth the marker: follow every fix, but blend it with the last one so it
   // glides instead of freezing and jumping, and drop impossible teleports.
@@ -79,7 +80,10 @@ export function watchCurrentLocation(
       if (moved / dt > 70 && bad < 3) { bad++; return; }
       bad = 0;
       const still = p.speed != null && p.speed < 0.8;
-      if (still && moved < Math.max(p.accuracy, 6)) return;
+      if (still && moved < Math.max(p.accuracy, 6)) {
+        if (emitStationary) emitPosition({ ...last, accuracy: p.accuracy, speed: p.speed });
+        return;
+      }
       const a = still ? 0.25 : Math.min(1, Math.max(0.55, 20 / Math.max(p.accuracy, 5)));
       p = { ...p, lat: last.lat + (p.lat - last.lat) * a, lng: last.lng + (p.lng - last.lng) * a };
     }

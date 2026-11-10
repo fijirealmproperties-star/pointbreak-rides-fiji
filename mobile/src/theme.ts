@@ -44,6 +44,13 @@ export function fmtDuration(min: number | null | undefined): string {
   return r ? `${h}h ${r}m` : `${h}h`;
 }
 
+export function fmtWaitTimer(min: number | null | undefined): string {
+  if (min == null || !Number.isFinite(min) || min < 0) return "—";
+  const seconds = Math.floor(min * 60);
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 // Server timestamps are UTC ("YYYY-MM-DD HH:MM:SS" without a zone); show them in the device's local time.
 export function parseServerDate(iso?: string | null): Date | null {
   if (!iso) return null;
