@@ -22,6 +22,7 @@ export default function UpdatePrompt() {
   const available = useUpdateAvailable();
   const [snoozeUntil, setSnoozeUntil] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [, tick] = useState(0);
 
   // "Later" only snoozes: the reminder returns until the app is updated.
@@ -33,7 +34,13 @@ export default function UpdatePrompt() {
 
   async function update() {
     setBusy(true);
-    await applyUpdate();
+    setError("");
+    try {
+      await applyUpdate();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not apply the update. Please try again.");
+      setBusy(false);
+    }
   }
   if (Platform.OS !== "web") return null;
 
@@ -62,6 +69,7 @@ export default function UpdatePrompt() {
         <View style={styles.box}>
           <Text style={styles.title}>Update available</Text>
           <Text style={styles.msg}>A new version of Pointbreak is ready. Update now to get the latest features and fixes.</Text>
+          {error ? <Text style={styles.error}>{error}</Text> : null}
           <TouchableOpacity style={styles.primary} onPress={update} disabled={busy}>
             <Text style={styles.primaryText}>{busy ? "Updating…" : "Update"}</Text>
           </TouchableOpacity>
@@ -79,6 +87,7 @@ const styles = StyleSheet.create({
   box: { width: "100%", maxWidth: 360, backgroundColor: colors.card, borderRadius: 18, borderWidth: 1, borderColor: colors.border, padding: 22 },
   title: { color: colors.text, fontSize: 18, fontWeight: "800" },
   msg: { color: colors.textMuted, fontSize: typography.body, lineHeight: 20, marginTop: 8 },
+  error: { color: colors.coral, fontSize: typography.body, marginTop: 8 },
   primary: { backgroundColor: colors.sunset, borderRadius: 12, paddingVertical: 14, alignItems: "center", marginTop: 18 },
   primaryText: { color: "#14100c", fontWeight: "800", fontSize: typography.body },
   later: { paddingVertical: 12, alignItems: "center", marginTop: 6 },

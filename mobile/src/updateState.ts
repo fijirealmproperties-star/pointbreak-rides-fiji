@@ -5,6 +5,21 @@ import { Platform } from "react-native";
 let available: string | null = null;
 let started = false;
 const listeners = new Set<(v: string | null) => void>();
+const UPDATE_TIMEOUT_MS = 10000;
+
+export async function withUpdateTimeout<T>(operation: Promise<T>, timeoutMs = UPDATE_TIMEOUT_MS): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("Update timed out. Check your connection and try again.")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer!);
+  }
+}
 
 function set(v: string | null) {
   if (v === available) return;
@@ -66,24 +81,58 @@ export function useUpdateAvailable(): string | null {
 
 // Clears cached copies and loads the newest build; the app restarts on the new version.
 export async function applyUpdate() {
+  const expected = available;
+  if (!expected) throw new Error("No update is currently available. Please try again later.");
+
+  const fetchUpdate = async (url: string) => {
+    const controller = new AbortController();
+    try {
+      return await withUpdateTimeout((async () => {
+        const response = await fetch(url, { cache: "no-store", signal: controller.signal });
+        const body = await response.text();
+        return { response, body };
+      })());
+    } finally {
+      controller.abort();
+    }
+  };
+  let html: string;
   try {
-    const regs = await navigator.serviceWorker?.getRegistrations();
-    await Promise.all((regs || []).map((r) => r.unregister()));
-    const keys = await caches.keys();
-    await Promise.all(keys.map((k) => caches.delete(k)));
-  } catch {}
+    const { response, body } = await fetchUpdate(`/?t=${Date.now()}`);
+    if (!response.ok) throw new Error("Update page unavailable");
+    html = body;
+  } catch {
+    throw new Error("Could not download the update. Check your connection and try again.");
+  }
+  const build = html.match(/<meta name="pb-build" content="([a-f0-9]+)"/);
+  const js = html.match(/src="(\/_expo\/static\/js\/[^"]+)"/);
+  if (!build || build[1] !== expected || !js) {
+    throw new Error("The new version is not ready yet. Please try again later.");
+  }
+  try {
+    const { response, body } = await fetchUpdate(js[1]);
+    if (!response.ok) throw new Error("Update bundle unavailable");
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType.includes("text/html") || !body.trim()) throw new Error("Update bundle is not JavaScript");
+  } catch {
+    throw new Error("Could not download the update. Check your connection and try again.");
+  }
+  try {
+    const regs = await withUpdateTimeout(navigator.serviceWorker?.getRegistrations() || Promise.resolve([]));
+    await withUpdateTimeout(Promise.all(regs.map((r) => r.unregister())));
+    if (typeof caches !== "undefined") {
+      const keys = await withUpdateTimeout(caches.keys());
+      await withUpdateTimeout(Promise.all(keys.map((k) => caches.delete(k))));
+    }
+  } catch {
+    throw new Error("Could not prepare the update. Close and reopen the app, then try again.");
+  }
   let tries = 0;
   try {
     const same = localStorage.getItem("pb-updated-to") === available;
     tries = same ? Number(localStorage.getItem("pb-update-tries") || 0) + 1 : 1;
     if (available) localStorage.setItem("pb-updated-to", available);
     localStorage.setItem("pb-update-tries", String(tries));
-  } catch {}
-  // Re-fetch the page and its bundle past every cache so the reload gets the new files.
-  try {
-    const html = await (await fetch(`/?t=${Date.now()}`, { cache: "reload" })).text();
-    const js = html.match(/src="(\/_expo\/static\/js\/[^"]+)"/);
-    if (js) await fetch(js[1], { cache: "reload" });
   } catch {}
   const path = tries % 2 === 0 ? "/index.html" : "/";
   window.location.replace(`${path}?v=${Date.now()}`);
