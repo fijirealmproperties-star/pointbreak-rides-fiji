@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
 import { enablePush } from "../push";
-import { nativePushAvailable, registerNativePush } from "../nativePush";
-import { nativeNotifs, permissionState } from "./NotificationPrompt";
+import { isNativeApp, registerNativePush } from "../nativePush";
+import { api } from "../api";
+import { permissionState } from "./NotificationPrompt";
 import { colors, typography } from "../theme";
 
 export default function NotificationButton() {
@@ -11,29 +12,44 @@ export default function NotificationButton() {
   const [busy, setBusy] = useState(false);
 
   const refresh = useCallback(async () => setState(await permissionState()), []);
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    if (typeof window === "undefined") return;
+    window.addEventListener("focus", refresh);
+    return () => window.removeEventListener("focus", refresh);
+  }, [refresh]);
 
   async function turnOn() {
     setBusy(true);
     setMsg("");
     try {
-      const n = nativeNotifs();
-      if (n) {
-        const p = await n.requestPermissions().catch(() => null);
-        if (p?.display === "granted") {
-          await registerNativePush();
-          setMsg("Notifications are on.");
-        } else {
-          setMsg("Blocked. Open phone Settings > Apps > Pointbreak > Notifications and turn them on.");
-        }
-      } else {
-        const r = await enablePush();
-        setMsg(r.ok ? "Notifications are on." : r.reason || "Could not turn on notifications. Check your browser or phone settings.");
-      }
-      if (state === "granted" && nativePushAvailable()) await registerNativePush();
+      const r = await enablePush();
+      setMsg(r.ok ? "Notifications are connected to this device." : r.reason || "Could not turn on notifications. Check your phone settings.");
+    } catch (error) {
+      console.warn("Could not enable notifications:", error);
+      setMsg(error instanceof Error ? error.message : "Could not enable notifications. Please try again.");
     } finally {
       setBusy(false);
       refresh();
+    }
+  }
+
+  async function testAppNotification() {
+    setBusy(true);
+    setMsg("");
+    try {
+      const result = await registerNativePush();
+      if (!result.ok || !result.token) {
+        setMsg(result.reason || "Could not connect app notifications.");
+        return;
+      }
+      setMsg("Go to your phone's home screen now. The test will be sent in 5 seconds.");
+      await api("/push/test-native", { method: "POST", body: { token: result.token } });
+      setMsg("App test notification sent. Tap it to open Pointbreak.");
+    } catch (error) {
+      setMsg(error instanceof Error ? error.message : "Could not send the app test notification.");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -42,11 +58,16 @@ export default function NotificationButton() {
     <View style={styles.card}>
       <Text style={styles.title}>🔔 Notifications</Text>
       <Text style={styles.sub}>
-        {on ? "On. You will get ride alerts and messages on this phone." : "Turn on to get ride alerts and messages in your phone's notification panel, even when the app is closed."}
+        {on ? (isNativeApp() ? "Permission is allowed. Tap below to connect app notifications." : "Notification permission is allowed.") : state === "denied" ? (isNativeApp() ? "Notifications are blocked. Allow them in your phone settings for Pointbreak." : "Notifications are blocked. Allow them in your browser's site settings for Pointbreak.") : "Turn on to get ride alerts and messages in your phone's notification panel, even when the app is closed."}
       </Text>
       <TouchableOpacity style={[styles.btn, on && styles.btnOn]} onPress={turnOn} disabled={busy}>
-        <Text style={styles.btnText}>{busy ? "Please wait..." : on ? "✓ Notifications on (tap to re-link)" : "Turn on notifications"}</Text>
+        <Text style={styles.btnText}>{busy ? "Please wait..." : on ? "Connect notifications again" : "Turn on notifications"}</Text>
       </TouchableOpacity>
+      {isNativeApp() ? (
+        <TouchableOpacity style={[styles.btn, styles.testBtn]} onPress={testAppNotification} disabled={busy}>
+          <Text style={styles.btnText}>Send app test notification</Text>
+        </TouchableOpacity>
+      ) : null}
       {msg ? <Text style={styles.msg}>{msg}</Text> : null}
     </View>
   );
@@ -58,6 +79,7 @@ const styles = StyleSheet.create({
   sub: { color: colors.textMuted ?? "#9FB3C8", fontSize: 13, marginBottom: 12 },
   btn: { backgroundColor: colors.ocean, borderRadius: 12, paddingVertical: 12, alignItems: "center" },
   btnOn: { backgroundColor: "#1E9E6A" },
+  testBtn: { marginTop: 8, backgroundColor: "#34485E" },
   btnText: { color: "#fff", fontWeight: "800", fontSize: 14 },
   msg: { color: colors.text, fontSize: 12, marginTop: 10 },
 });

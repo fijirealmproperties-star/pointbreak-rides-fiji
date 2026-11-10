@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Modal, View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { api, getUser } from "../api";
 import { enablePush, pushSupported } from "../push";
-import { nativePushAvailable, registerNativePush } from "../nativePush";
+import { isNativeApp, registerNativePush } from "../nativePush";
 import { colors, typography } from "../theme";
 
 const isWeb = Platform.OS === "web" && typeof window !== "undefined";
@@ -28,6 +28,7 @@ export async function permissionState(): Promise<"granted" | "denied" | "ask" | 
     } catch {
       return "unsupported";
     }
+    if (isNativeApp()) return "unsupported";
   }
   if (isWeb && "Notification" in window) {
     return Notification.permission === "granted" ? "granted" : Notification.permission === "denied" ? "denied" : "ask";
@@ -58,7 +59,10 @@ export default function NotificationPrompt() {
     if (s === "ask") setShow(true);
     else if (s === "granted") {
       setShow(false);
-      if (nativePushAvailable()) registerNativePush();
+      if (isNativeApp()) {
+        const result = await registerNativePush(false);
+        if (!result.ok) console.warn("App notifications are not connected:", result.reason);
+      }
       else if (pushSupported()) enablePush().catch(() => {});
     }
   }, []);
@@ -92,17 +96,9 @@ export default function NotificationPrompt() {
 
   async function allow() {
     setMsg("");
-    const n = nativeNotifs();
-    if (n) {
-      const p = await n.requestPermissions().catch(() => null);
-      if (p?.display === "granted") { setShow(false); registerNativePush(); }
-      else setMsg("Notifications are blocked. Open phone Settings > Apps > Pointbreak > Notifications and turn them on.");
-    } else {
-      const r = await enablePush();
-      if (r.ok) setShow(false);
-      else setMsg(r.reason || "Could not turn on notifications.");
-    }
-    refresh();
+    const r = await enablePush();
+    if (r.ok) { setShow(false); refresh(); }
+    else setMsg(r.reason || "Could not turn on notifications.");
   }
 
   function later() {

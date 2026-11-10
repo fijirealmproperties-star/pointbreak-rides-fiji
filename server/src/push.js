@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS notice_reads (
 }
 
 const getPublicKey = () => publicKey;
+const isFcmReady = () => !!fcm;
 
 function saveSubscription(db, userId, sub) {
   db.prepare('INSERT OR REPLACE INTO push_subscriptions (endpoint, user_id, sub_json) VALUES (?, ?, ?)')
@@ -90,12 +91,14 @@ function hasSubscription(db, userId) {
     || !!db.prepare('SELECT 1 AS x FROM fcm_tokens WHERE user_id=? LIMIT 1').get(userId);
 }
 
-async function sendPush(db, userId, payload) {
+async function sendPush(db, userId, payload, options = {}) {
   if (!ready || !userId) return 0;
   const rows = db.prepare('SELECT endpoint, sub_json FROM push_subscriptions WHERE user_id=?').all(userId);
   let sent = 0;
   if (fcm) {
-    const tokens = db.prepare('SELECT token FROM fcm_tokens WHERE user_id=?').all(userId);
+    const tokens = options.fcmToken
+      ? db.prepare('SELECT token FROM fcm_tokens WHERE user_id=? AND token=?').all(userId, options.fcmToken)
+      : db.prepare('SELECT token FROM fcm_tokens WHERE user_id=?').all(userId);
     await Promise.all(tokens.map(async (t) => {
       try {
         await fcm.send({
@@ -114,7 +117,7 @@ async function sendPush(db, userId, payload) {
     }));
   }
   // The installed Android app already got it; a browser notification would open the website instead of the app.
-  if (sent > 0) return sent;
+  if (sent > 0 || options.fcmToken) return sent;
   await Promise.all(rows.map(async (row) => {
     try {
       await webpush.sendNotification(JSON.parse(row.sub_json), JSON.stringify(payload), {
@@ -130,4 +133,4 @@ async function sendPush(db, userId, payload) {
   return sent;
 }
 
-module.exports = { saveFcmToken, initPush, getPublicKey, saveSubscription, removeSubscription, hasSubscription, sendPush };
+module.exports = { saveFcmToken, initPush, getPublicKey, isFcmReady, saveSubscription, removeSubscription, hasSubscription, sendPush };

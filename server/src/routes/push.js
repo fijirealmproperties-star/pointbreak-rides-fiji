@@ -1,6 +1,6 @@
 const express = require('express');
 const { requireAuth } = require('../middleware/auth');
-const { saveFcmToken, getPublicKey, saveSubscription, removeSubscription, sendPush } = require('../push');
+const { saveFcmToken, getPublicKey, isFcmReady, saveSubscription, removeSubscription, sendPush } = require('../push');
 
 module.exports = (db) => {
   const router = express.Router();
@@ -23,6 +23,9 @@ module.exports = (db) => {
     if (typeof token !== 'string' || token.length < 20 || token.length > 4096) {
       return res.status(400).json({ error: 'Invalid token' });
     }
+    if (!isFcmReady()) {
+      return res.status(503).json({ error: 'App notifications are not configured on the server.' });
+    }
     saveFcmToken(db, req.user.userId, token);
     res.json({ ok: true });
   });
@@ -39,7 +42,28 @@ module.exports = (db) => {
       body: 'Notifications are working on this device.',
       tag: 'pb-test',
     });
+
     res.json({ ok: true, sent });
+  });
+
+  router.post('/test-native', requireAuth, async (req, res, next) => {
+    try {
+      const token = req.body && req.body.token;
+      if (typeof token !== 'string' || token.length < 20 || token.length > 4096) {
+        return res.status(400).json({ error: 'Invalid token' });
+      }
+      if (!isFcmReady()) return res.status(503).json({ error: 'App notifications are not configured on the server.' });
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      const sent = await sendPush(db, req.user.userId, {
+        title: 'Pointbreak app test',
+        body: 'Tap this notification to open the Pointbreak app.',
+        tag: 'pb-native-test',
+      }, { fcmToken: token });
+      if (!sent) return res.status(503).json({ error: 'Could not deliver the app test notification. Please try again or contact support.' });
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
   });
 
   return router;

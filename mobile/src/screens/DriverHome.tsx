@@ -115,7 +115,9 @@ export default function DriverHome({ onOpenRide }: Props) {
           } else if (d.status === "online") {
             wentOnlineRef.current = true;
             setOnline(true);
-            enablePush().catch(() => {});
+            enablePush().then(result => {
+              if (!result.ok) console.warn("Could not connect ride notifications:", result.reason);
+            }).catch(error => console.warn("Could not connect ride notifications:", error));
           }
         } catch {
           // backend offline — that's fine, we stay offline
@@ -260,7 +262,9 @@ export default function DriverHome({ onOpenRide }: Props) {
     setStartingOnline(true);
     primeAudio();
     // Push is best-effort; a failure here must not show an error under the map.
-    await enablePush().catch(() => {});
+    enablePush().then(result => {
+      if (!result.ok) console.warn("Could not connect ride notifications:", result.reason);
+    }).catch(error => console.warn("Could not connect ride notifications:", error));
     try {
       // Confirm a fresh, accurate fix before making the
       // driver available for matching.

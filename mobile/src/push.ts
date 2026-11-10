@@ -1,11 +1,12 @@
 import { Platform } from "react-native";
 import { api } from "./api";
+import { isNativeApp, registerNativePush } from "./nativePush";
 
 // Web Push + in-app alert sound (web/PWA only; native builds ignore these).
 const isWeb = Platform.OS === "web" && typeof window !== "undefined";
 
 export function pushSupported(): boolean {
-  return isWeb && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+  return isNativeApp() || (isWeb && "serviceWorker" in navigator && "PushManager" in window && "Notification" in window);
 }
 
 function urlBase64ToUint8Array(b64: string) {
@@ -19,6 +20,7 @@ function urlBase64ToUint8Array(b64: string) {
 // Asks for permission (must be called from a tap) and registers this device
 // with the server so ride alerts arrive even when the app is closed.
 export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
+  if (isNativeApp()) return registerNativePush();
   if (!isWeb) return { ok: false };
   if (!pushSupported()) {
     return { ok: false, reason: "Install the app to your home screen (Share → Add to Home Screen) to get alerts when it is closed." };
@@ -26,8 +28,11 @@ export async function enablePush(): Promise<{ ok: boolean; reason?: string }> {
   let step = "start";
   try {
     step = "permission";
+    if (Notification.permission === "denied") {
+      return { ok: false, reason: "Notifications are blocked for this website. Open your browser's site settings for Pointbreak and allow notifications, then try again." };
+    }
     const perm = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-    if (perm !== "granted") return { ok: false, reason: "Notifications are blocked. Allow them in your phone settings for Pointbreak." };
+    if (perm !== "granted") return { ok: false, reason: "Notifications were not allowed. Check your browser's site settings for Pointbreak, then try again." };
     step = "service worker";
     const reg: ServiceWorkerRegistration = await Promise.race([
       navigator.serviceWorker.ready,
