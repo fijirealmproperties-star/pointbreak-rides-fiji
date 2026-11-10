@@ -43,7 +43,7 @@ jobs:
       - name: Create Android project
         working-directory: mobile
         run: |
-          npm install --no-save @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 @capacitor-community/background-geolocation@1 @capacitor/local-notifications@6 @capacitor/push-notifications@6
+          npm install --no-package-lock --save-dev @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 @capacitor/assets@3 @capacitor-community/background-geolocation@1 @capacitor/local-notifications@6 @capacitor/push-notifications@6
           cat > capacitor.config.json <<'EOF'
           {
             "appId": "fj.pointbreak.rides",
@@ -62,6 +62,7 @@ jobs:
           npx capacitor-assets generate --android --iconBackgroundColor '#02266E'
           cp google-services.json android/app/google-services.json
           npx cap sync android
+          node -e "const plugins = require('./android/app/src/main/assets/capacitor.plugins.json'); for (const name of ['@capacitor/push-notifications', '@capacitor/local-notifications', '@capacitor-community/background-geolocation']) { if (!plugins.some(p => p.pkg === name)) throw new Error('Missing Android plugin: ' + name); }"
           M=android/app/src/main/AndroidManifest.xml
           sed -i 's#<application#<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.POST_NOTIFICATIONS" /><uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" /><uses-permission android:name="android.permission.FOREGROUND_SERVICE" /><uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" /><uses-permission android:name="android.permission.WAKE_LOCK" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application#' "$M"
           sed -i 's#<application#<application android:usesCleartextTraffic="false"#' "$M"
