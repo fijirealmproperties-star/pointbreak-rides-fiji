@@ -68,6 +68,7 @@ test("stationary GPS fixes reach the ride meter without moving the map position"
       clearWatch(id) { assert.equal(id, 42); stopped = true; },
     } },
   });
+
   try {
     const { watchCurrentLocation } = load("geo.ts", {
       "./nativeGps": { nativeGpsAvailable: () => false },
@@ -86,4 +87,19 @@ test("stationary GPS fixes reach the ride meter without moving the map position"
     if (oldNavigator) Object.defineProperty(globalThis, "navigator", oldNavigator);
     else delete globalThis.navigator;
   }
+});
+
+test("stationary visual updates are limited without suppressing movement or the five-second meter update", () => {
+  const { skipFrequentStationaryUpdate } = load("geo.ts", {
+    "./nativeGps": { nativeGpsAvailable: () => false },
+    "expo-location": {},
+  });
+  const last = { lat: -17.8, lng: 177.4, at: 1000 };
+  const still = { lat: -17.8, lng: 177.4, accuracy: 10, speed: 0 };
+  assert.equal(skipFrequentStationaryUpdate(still, null, 2000), false);
+  assert.equal(skipFrequentStationaryUpdate(still, last, 2000), true);
+  assert.equal(skipFrequentStationaryUpdate(still, last, 6000), false);
+  assert.equal(skipFrequentStationaryUpdate({ ...still, speed: 5 }, last, 2000), false);
+  assert.equal(skipFrequentStationaryUpdate({ ...still, lat: -17.799 }, last, 2000), false);
+  assert.equal(skipFrequentStationaryUpdate({ ...still, speed: null }, last, 2000), false);
 });

@@ -13,7 +13,7 @@ import { colors, typography, fmtFare, fmtKm, fmtDuration } from "../theme";
 import { api, getToken, Ride, parsePath } from "../api";
 import { connectSocket, getSocket } from "../socket";
 import { isDriverApp } from "../appMode";
-import { bearing, haversine, watchCurrentLocation } from "../geo";
+import { bearing, haversine, skipFrequentStationaryUpdate, watchCurrentLocation } from "../geo";
 import MapView, { MapMarker, MapPoint } from "../components/MapView";
 import TaxiMeter from "../components/TaxiMeter";
 
@@ -74,8 +74,10 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
 
   useEffect(() => {
     let mounted = true;
+    let cleanup = () => {};
     (async () => {
       const token = await getToken();
+      if (!mounted) return;
       const socket = getSocket() || connectSocket(token || "");
       const onStatus = (ev: any) => {
         if (!ev || ev.ride_id !== rideId) return;
@@ -108,12 +110,15 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       socket.on("ride_status", onStatus);
       socket.on("ride_location_update", onLoc);
       socket.emit("ride_subscribe", { ride_id: rideId });
-      return () => {
-        mounted = false;
+      cleanup = () => {
         socket.off("ride_status", onStatus);
         socket.off("ride_location_update", onLoc);
       };
     })();
+    return () => {
+      mounted = false;
+      cleanup();
+    };
   }, [rideId]);
 
 
@@ -202,6 +207,12 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
     let lastSent: { lat: number; lng: number; at: number } | null = null;
     return watchCurrentLocation(
       (position) => {
+        const now = Date.now();
+        const movedKm = lastSent
+          ? haversine(lastSent.lat, lastSent.lng, position.lat, position.lng)
+          : Infinity;
+        if (skipFrequentStationaryUpdate(position, lastSent, now)) return;
+
         setSelfPos({ lat: position.lat, lng: position.lng });
         setGpsAccuracy(position.accuracy);
         setLocationError("");
@@ -210,10 +221,6 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
         );
         if (position.accuracy == null || position.accuracy < 100) maybeReroute(position.lat, position.lng);
 
-        const now = Date.now();
-        const movedKm = lastSent
-          ? haversine(lastSent.lat, lastSent.lng, position.lat, position.lng)
-          : Infinity;
         if (lastSent && movedKm < 0.005 && now - lastSent.at < 5000) return;
         lastSent = { lat: position.lat, lng: position.lng, at: now };
 

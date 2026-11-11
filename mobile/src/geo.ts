@@ -43,6 +43,15 @@ export function interpolatePoint(
 
 export type CurrentLocation = { lat: number; lng: number; accuracy: number; speed?: number | null };
 
+export function skipFrequentStationaryUpdate(
+  position: CurrentLocation,
+  lastSent: { lat: number; lng: number; at: number } | null,
+  now: number
+): boolean {
+  return !!lastSent && position.speed != null && position.speed >= 0 && position.speed < 0.8 &&
+    now - lastSent.at < 5000 && haversine(lastSent.lat, lastSent.lng, position.lat, position.lng) < 0.005;
+}
+
 function browserLocationError(error: GeolocationPositionError): Error {
   if (error.code === error.PERMISSION_DENIED) {
     return new Error(
