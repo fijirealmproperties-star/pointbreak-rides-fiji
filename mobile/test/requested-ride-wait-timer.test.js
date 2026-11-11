@@ -36,6 +36,8 @@ test("requested ride meter displays its recorded waiting time", () => {
   const theme = load("theme.ts");
   const { default: TaxiMeter } = load("components/TaxiMeter.tsx", {
     "../theme": theme,
+    "../rideMeterDisplay": load("rideMeterDisplay.ts"),
+    "react": { ...require("react"), useState: () => [0, () => {}], useEffect: () => {} },
     "react-native": {
       View: "View",
       Text: "Text",
@@ -55,6 +57,29 @@ test("requested ride meter displays its recorded waiting time", () => {
   collect(element);
   assert.ok(text.includes("WAITING TIME"));
   assert.ok(text.includes("00:30"));
+});
+
+test("requested ride meter labels the estimated timer and fare", () => {
+  const { default: TaxiMeter } = load("components/TaxiMeter.tsx", {
+    "../theme": load("theme.ts"),
+    "../rideMeterDisplay": load("rideMeterDisplay.ts"),
+    "react": { ...require("react"), useState: () => [4000, () => {}], useEffect: () => {} },
+    "react-native": { View: "View", Text: "Text", StyleSheet: { create: (styles) => styles } },
+  });
+  const element = TaxiMeter({ ride: {
+    fare: 2, distance_km: 1, duration_min: 4, meter_distance_km: 0,
+    meter_fare: 2.18, meter_wait_min: 1, speed_kmh: 0, stopped_recv_at: 1000,
+  } });
+  const text = [];
+  function collect(node) {
+    if (typeof node === "string" || typeof node === "number") text.push(String(node));
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node && node.props) collect(node.props.children);
+  }
+  collect(element);
+  assert.ok(text.includes("01:03"));
+  assert.ok(text.includes("FJ$2.19"));
+  assert.ok(text.includes("Estimated between updates · final fare confirmed by server"));
 });
 
 test("stationary GPS fixes reach the ride meter without moving the map position", () => {

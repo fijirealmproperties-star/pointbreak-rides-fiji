@@ -1,12 +1,26 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { colors, typography, fmtFare, fmtKm, fmtDuration, fmtWaitTimer } from "../theme";
 import { Ride } from "../api";
+import { estimateRideMeter } from "../rideMeterDisplay";
 
 export default function TaxiMeter({ ride }: { ride: Ride }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    setNow(Date.now());
+    if (ride.stopped_recv_at == null || ride.speed_kmh == null || ride.speed_kmh >= 10) return;
+    const timer = setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current - (ride.stopped_recv_at ?? current) > 5000) clearInterval(timer);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [ride.stopped_recv_at, ride.speed_kmh]);
   const metered = typeof ride.meter_distance_km === "number";
   const distanceKm = metered ? (ride.meter_distance_km as number) : ride.distance_km;
-  const fare = typeof ride.meter_fare === "number" ? (ride.meter_fare as number) : ride.fare;
+  const display = estimateRideMeter(ride.meter_wait_min, ride.meter_fare, ride.speed_kmh, ride.stopped_recv_at, now);
+  const fare = typeof display.fare === "number" ? display.fare : ride.fare;
+  const stale = ride.stopped_recv_at != null && now - ride.stopped_recv_at > 5000;
   return (
     <View style={styles.meter}>
       <Text style={styles.meterLabel}>● TAXI METER · LIVE</Text>
@@ -27,8 +41,12 @@ export default function TaxiMeter({ ride }: { ride: Ride }) {
       </View>
       <View style={styles.waiting}>
         <Text style={styles.waitingLabel}>WAITING TIME</Text>
-        <Text style={styles.waitingTime}>{fmtWaitTimer(ride.meter_wait_min)}</Text>
-        <Text style={styles.waitingNote}>Minutes:seconds · updates with the meter</Text>
+        <Text style={styles.waitingTime}>{fmtWaitTimer(display.waitMin)}</Text>
+        <Text style={styles.waitingNote}>
+          {display.estimated ? "Estimated between updates · final fare confirmed by server"
+            : stale ? "Waiting for meter update · last confirmed reading"
+            : "Confirmed meter reading · minutes:seconds"}
+        </Text>
       </View>
       <Text style={styles.tariff}>
         Flag fall FJ$2 day · FJ$3 night · FJ$0.14 / 100 m · FJ$0.18 / min waiting

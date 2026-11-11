@@ -23,9 +23,13 @@ export function startMeterGps(
   let stopSource: (() => void) | null = null;
   let lastRaw = Date.now();
   let starting = false;
+  let usingNative = false;
+  let gotFix = false;
+  let forceWeb = false;
 
   const deliver = (f: MeterFix) => {
     if (!active) return;
+    gotFix = true;
     lastRaw = Date.now();
     onFix(f);
   };
@@ -37,7 +41,8 @@ export function startMeterGps(
       stopSource?.();
       stopSource = null;
       let stop: () => void;
-      if (nativeGpsAvailable()) {
+      usingNative = nativeGpsAvailable() && !forceWeb;
+      if (usingNative) {
         stop = await startNativeWatch(
           (f) => deliver({ latitude: f.latitude, longitude: f.longitude, accuracy: f.accuracy, speed: f.speed, time: f.time }),
           (code) => { if (code === "NOT_AUTHORIZED") onProblem("denied"); }
@@ -68,6 +73,7 @@ export function startMeterGps(
       else stop();
       lastRaw = Date.now();
     } catch {
+      if (usingNative && !gotFix) forceWeb = true;
       onProblem("unavailable");
     } finally {
       starting = false;
@@ -78,6 +84,8 @@ export function startMeterGps(
   const watchdog = setInterval(() => {
     if (active && Date.now() - lastRaw > SILENCE_MS) {
       lastRaw = Date.now();
+      // The native service never delivered a fix: use the phone's web/expo GPS instead.
+      if (usingNative && !gotFix) forceWeb = true;
       void attach();
     }
   }, 4000);
