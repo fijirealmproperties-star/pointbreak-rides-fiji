@@ -19,6 +19,7 @@
     "firebase-admin": "^12.7.0",
     "helmet": "^7.2.0",
     "jsonwebtoken": "^9.0.3",
+    "resend":"^4.0.0", 
     "socket.io": "^4.7.2",
     "sql.js": "^1.14.1",
     "uuid": "^9.0.0",
