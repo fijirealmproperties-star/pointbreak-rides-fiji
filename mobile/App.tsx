@@ -6,6 +6,7 @@ import {
   StyleSheet,
   StatusBar,
   ScrollView,
+  Platform,
 } from "react-native";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography } from "./src/theme";
@@ -37,6 +38,7 @@ import UpdateButton from "./src/components/UpdateButton";
 import NotificationButton from "./src/components/NotificationButton";
 import NotificationPrompt from "./src/components/NotificationPrompt";
 import LocationGate from "./src/components/LocationGate";
+import PublicLanding from "./src/screens/PublicLanding";
 
 type TabKey = "home" | "trips" | "meter" | "profile";
 
@@ -149,6 +151,7 @@ function Root() {
   const [user, setUser] = useState<User | null>(null);
   const [booted, setBooted] = useState(false);
   const [screen, setScreen] = useState<Screen>({ name: "login" });
+  const [showLanding, setShowLanding] = useState(Platform.OS === "web");
 
   useEffect(() => {
     (async () => {
@@ -168,6 +171,7 @@ function Root() {
         }
       }
       setUser(u);
+      if (u) setShowLanding(false);
       setScreen(u ? (u.role === "driver" ? { name: "driver-home" } : { name: "rider-home" }) : { name: "login" });
       setBooted(true);
     })();
@@ -179,6 +183,7 @@ function Root() {
         disconnectSocket();
         setUser(null);
         setScreen({ name: "login" });
+        setShowLanding(Platform.OS === "web");
       });
     });
     return () => setOnUnauthorized(null);
@@ -237,12 +242,17 @@ function Root() {
         backgroundColor={colors.deep}
       />
       {!user || screen.name === "login" ? (
-        <LoginScreen
-          onLogin={(u) => {
-            setUser(u);
-            setScreen(u.role === "driver" ? { name: "driver-home" } : { name: "rider-home" });
-          }}
-        />
+        showLanding ? (
+          <PublicLanding onContinue={() => setShowLanding(false)} />
+        ) : (
+          <LoginScreen
+            onBackToLanding={Platform.OS === "web" ? () => setShowLanding(true) : undefined}
+            onLogin={(u) => {
+              setUser(u);
+              setScreen(u.role === "driver" ? { name: "driver-home" } : { name: "rider-home" });
+            }}
+          />
+        )
       ) : screen.name === "rider-home" ? (
         <RiderHome onOpenRide={(rideId) => setScreen({ name: "rider-active-ride", rideId })} />
       ) : screen.name === "rider-active-ride" ? (
@@ -272,6 +282,7 @@ function Root() {
         </View>
       ) : null}
       {showTab && <TabBar active={activeTab} onTab={goTab} isDriver={user?.role === "driver"} />}
+      {user ? <LocationGate /> : null}
     </View>
   );
 }
@@ -282,7 +293,6 @@ export default function App() {
       <Root />
       <UpdatePrompt />
       <NotificationPrompt />
-      <LocationGate />
     </SafeAreaProvider>
   );
 }

@@ -1,6 +1,7 @@
 const express = require('express');
 const { requireAuth, requireRole } = require('../middleware/auth');
 const { rideForDriver } = require('../rides/ride-utils');
+const { normEmail, validEmail, mailConfigured, sendMail } = require('../verify');
 
 const router = express.Router();
 
@@ -168,14 +169,82 @@ module.exports = (db, matchingEngine) => {
     const open = trip_id
       ? db.prepare("SELECT id FROM roadside_trips WHERE id=? AND driver_id=? AND status='running'").get(trip_id, driverId)
       : null;
+    let savedTripId;
     if (open) {
       db.prepare("UPDATE roadside_trips SET tariff_type=?, total_fare=?, trip_duration_seconds=?, trip_distance_km=?, status='finished', ended_at=datetime('now') WHERE id=?")
         .run(tariff_type, fare, secs, km, open.id);
+      savedTripId = open.id;
     } else {
-      db.prepare("INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km, status, ended_at) VALUES (?, ?, ?, ?, ?, 'finished', datetime('now'))")
+      const info = db.prepare("INSERT INTO roadside_trips (driver_id, tariff_type, total_fare, trip_duration_seconds, trip_distance_km, status, ended_at) VALUES (?, ?, ?, ?, ?, 'finished', datetime('now'))")
         .run(driverId, tariff_type, fare, secs, km);
+      savedTripId = info.lastInsertRowid;
     }
-    res.json({ ok: true });
+    res.json({ ok: true, trip_id: savedTripId });
+  });
+
+  router.post('/roadside-trips/:id/receipt', async (req, res) => {
+    const driver = driverFor(req.user.userId);
+    if (!driver) return res.status(404).json({ error: 'Driver record not found' });
+    const id = Number(req.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) return res.status(404).json({ error: 'Meter trip not found' });
+
+    const trip = db.prepare(`
+      SELECT t.*, d.full_name AS driver_name
+      FROM roadside_trips t
+      LEFT JOIN drivers d ON d.id=t.driver_id
+      WHERE t.id=? AND t.driver_id=? AND t.tariff_type IN ('SURFS_UP_day', 'SURFS_UP_night')
+    `).get(id, driver.id);
+    if (!trip || trip.status !== 'finished') {
+      return res.status(404).json({ error: 'Finished Surfs Up Meter trip not found' });
+    }
+    if (trip.receipt_status === 'sent') {
+      return res.status(409).json({ error: 'A receipt has already been sent for this trip' });
+    }
+    if (trip.receipt_status === 'sending') {
+      return res.status(409).json({ error: 'The receipt is already being sent' });
+    }
+
+    const email = normEmail(req.body && req.body.email);
+    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid passenger email address' });
+    if (!mailConfigured()) {
+      return res.status(503).json({ error: 'Receipt email is not configured. Set RESEND_API_KEY to enable sending.' });
+    }
+
+    const claimed = db.prepare(`
+      UPDATE roadside_trips SET receipt_email=?, receipt_status='sending'
+      WHERE id=? AND driver_id=? AND status='finished' AND receipt_status IN ('not_sent', 'failed')
+    `).run(email, id, driver.id);
+    if (!claimed || claimed.changes !== 1) {
+      return res.status(409).json({ error: 'The receipt is already being sent or has already been sent' });
+    }
+
+    const subject = `Your Surfs Up Meter receipt · Trip #${id}`;
+    const text = [
+      `Hello,`,
+      '',
+      `Here is your Surfs Up Meter receipt from Pointbreak Fiji Rides.`,
+      `Trip: #${id}`,
+      `Driver: ${trip.driver_name || 'Pointbreak driver'}`,
+      `Date: ${trip.ended_at || trip.created_at}`,
+      `Tariff: ${trip.tariff_type === 'SURFS_UP_night' ? 'Night' : 'Day'}`,
+      `Distance: ${Number(trip.trip_distance_km || 0).toFixed(2)} km`,
+      `Duration: ${Math.floor(Number(trip.trip_duration_seconds || 0) / 60)} min`,
+      `Total fare: FJ$ ${Number(trip.total_fare || 0).toFixed(2)}`,
+      '',
+      `Thank you for riding with Pointbreak Fiji Rides.`,
+    ].join('\n');
+
+    if (!await sendMail(email, subject, text)) {
+      db.prepare("UPDATE roadside_trips SET receipt_status='failed' WHERE id=? AND driver_id=? AND receipt_status='sending'")
+        .run(id, driver.id);
+      return res.status(502).json({ error: 'Could not send the receipt email. Please try again.' });
+    }
+
+    db.prepare(`
+      UPDATE roadside_trips SET receipt_status='sent', receipt_sent_at=datetime('now')
+      WHERE id=? AND driver_id=? AND receipt_status='sending'
+    `).run(id, driver.id);
+    res.json({ ok: true, email });
   });
 
   router.get('/roadside-trips', (req, res) => {

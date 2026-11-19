@@ -130,6 +130,35 @@ module.exports = (db, matchingEngine) => {
     res.json({ rides });
   });
 
+  router.get('/guest-bookings', (req, res) => {
+    const bookings = db.prepare(`
+      SELECT id, name, email, phone, pickup, dropoff, scheduled_at, passengers, notes,
+             status, created_at, updated_at
+      FROM guest_bookings
+      ORDER BY CASE status WHEN 'pending' THEN 0 ELSE 1 END, scheduled_at ASC, created_at DESC
+      LIMIT 200
+    `).all();
+    res.json({ bookings });
+  });
+
+  router.patch('/guest-bookings/:id', (req, res) => {
+    const status = req.body && req.body.status;
+    if (!['confirmed', 'declined'].includes(status)) {
+      return res.status(400).json({ error: 'status must be confirmed or declined' });
+    }
+    const result = db.prepare(`
+      UPDATE guest_bookings SET status=?, updated_at=datetime('now')
+      WHERE id=? AND status='pending'
+    `).run(status, req.params.id);
+    if (!result || result.changes !== 1) {
+      const booking = db.prepare('SELECT status FROM guest_bookings WHERE id=?').get(req.params.id);
+      return res.status(booking ? 409 : 404).json({
+        error: booking ? 'This request has already been reviewed' : 'Guest booking request not found',
+      });
+    }
+    res.json({ id: req.params.id, status });
+  });
+
   // Manually assign a free driver to an advance booking.
   router.post('/rides/:id/assign', (req, res) => {
     const driverId = req.body && req.body.driver_id;

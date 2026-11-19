@@ -7,6 +7,37 @@ let assigningRideId = null;
 let rides = [];
 let drivers = [];
 let liveRiders = [];
+let guestBookings = [];
+let websiteContent = null;
+let websitePosts = [];
+let websiteMedia = [];
+let cmsHeroImageId = null;
+let cmsAboutImageId = null;
+let cmsBackgroundImageId = null;
+let cmsPostImageId = null;
+let cmsHeroPreviewUrl = null;
+let cmsAboutPreviewUrl = null;
+let cmsBackgroundPreviewUrl = null;
+let cmsPostPreviewUrl = null;
+let websitePreviewFrameId = null;
+const websitePreviewSentImages = { hero: null, about: null, background: null, post: null };
+const websiteSectionNames = {
+  home: 'Home',
+  features: 'Features',
+  rides: 'Ride options',
+  booking: 'Booking',
+  news: 'News',
+  about: 'About',
+  contact: 'Contact',
+};
+let cmsSectionOrder = Object.keys(websiteSectionNames);
+const cmsPreviewUrls = new Map();
+const websiteAdminMode = window.location.pathname.startsWith('/website-admin');
+let websiteAdminToken = localStorage.getItem('pb_website_admin_token') || null;
+let websiteAdminRefresh = localStorage.getItem('pb_website_admin_refresh') || null;
+let websiteAdminEmail = localStorage.getItem('pb_website_admin_email') || null;
+let websiteAdminPreviewMode = !(websiteAdminToken && websiteAdminEmail);
+let websiteAdminAuthVisible = false;
 // "Keep me logged in" unticked: the admin sign-in only lasts for this browser session.
 if (localStorage.getItem('pb_admin_keep') === '0' && !sessionStorage.getItem('pb_admin_sess')) {
   ['pb_admin_token', 'pb_admin_refresh', 'pb_admin_user'].forEach((k) => localStorage.removeItem(k));
@@ -40,6 +71,14 @@ async function refreshAdminToken() {
 window.fetch = async function (url, opts = {}) {
   const isAdminApi = typeof url === 'string' && url.includes('/api/admin/');
   if (!isAdminApi) return nativeFetch(url, opts);
+  if (url.includes('/api/admin/website')) {
+    if (!websiteAdminMode) return nativeFetch(url, opts);
+    const withWebsiteAuth = () => ({ ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + websiteAdminToken } });
+    let res = await nativeFetch(url, withWebsiteAuth());
+    if (res.status === 401 && await refreshWebsiteAdminToken()) res = await nativeFetch(url, withWebsiteAuth());
+    if (res.status === 401 && websiteAdminToken) websiteAdminLogout();
+    return res;
+  }
   const withAuth = () => ({ ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + adminToken } });
   let res = await nativeFetch(url, withAuth());
   if (res.status === 401 && await refreshAdminToken()) res = await nativeFetch(url, withAuth());
@@ -55,6 +94,20 @@ window.fetch = async function (url, opts = {}) {
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
+  if (websiteAdminMode) {
+    document.body.classList.add('website-admin-mode');
+    document.title = 'Pointbreak Website Admin';
+    document.querySelector('.header-subtitle').textContent = 'Website Editor';
+    initializeWebsiteBuilder();
+    renderWebsiteAdminState();
+    if (websiteAdminToken && websiteAdminEmail) {
+      showTab('website');
+      loadWebsiteEditor();
+    } else {
+      loadWebsiteEditorPreview();
+    }
+    return;
+  }
   renderAdminState();
   if (adminToken && adminUserName) await startDashboard();
   setInterval(pollData, 5000);
@@ -83,6 +136,292 @@ function renderAdminState() {
     if (bar) bar.style.display = 'none';
     if (status) { status.textContent = ''; status.className = 'register-status'; }
     if (socket) { socket.disconnect(); socket = null; }
+  }
+}
+
+async function refreshWebsiteAdminToken() {
+  if (!websiteAdminRefresh) return false;
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken: websiteAdminRefresh }),
+    });
+    if (!response.ok) return false;
+    const data = await response.json();
+    websiteAdminToken = data.accessToken || null;
+    websiteAdminRefresh = data.refreshToken || websiteAdminRefresh;
+    if (!websiteAdminToken) return false;
+    localStorage.setItem('pb_website_admin_token', websiteAdminToken);
+    localStorage.setItem('pb_website_admin_refresh', websiteAdminRefresh);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function renderWebsiteAdminState() {
+  const signedIn = !!(websiteAdminToken && websiteAdminEmail);
+  websiteAdminPreviewMode = !signedIn;
+  document.getElementById('admin-login-screen').hidden = true;
+  document.getElementById('website-admin-auth-screen').hidden = signedIn || !websiteAdminAuthVisible;
+  document.getElementById('admin-dashboard').hidden = !signedIn && websiteAdminAuthVisible;
+  document.getElementById('website-admin-account').textContent = signedIn ? websiteAdminEmail : 'Preview mode · not saved';
+  document.getElementById('cms-preview-banner').hidden = signedIn;
+  document.getElementById('website-admin-signin').hidden = signedIn;
+  document.getElementById('website-admin-password-change').hidden = !signedIn;
+  document.getElementById('website-admin-signout').hidden = !signedIn;
+  setWebsiteEditorPreviewMode(!signedIn);
+  if (signedIn) showTab('website');
+}
+
+function initializeWebsiteBuilder() {
+  const contentForm = document.getElementById('website-content-form');
+  const postForm = document.getElementById('website-post-form');
+  const frame = document.getElementById('cms-live-preview-frame');
+  [contentForm, postForm].forEach((form) => {
+    form.addEventListener('input', queueWebsitePreviewUpdate);
+    form.addEventListener('change', queueWebsitePreviewUpdate);
+  });
+  frame.addEventListener('load', () => {
+    websitePreviewSentImages.hero = null;
+    websitePreviewSentImages.about = null;
+    websitePreviewSentImages.background = null;
+    websitePreviewSentImages.post = null;
+    queueWebsitePreviewUpdate();
+  });
+  document.getElementById('cms-theme-preset').addEventListener('change', applyWebsiteThemePreset);
+  renderWebsiteSectionOrder(cmsSectionOrder);
+  renderWebsiteLinkFields([]);
+}
+
+function setWebsiteEditorPreviewMode(previewMode) {
+  document.querySelector('#website-content-form button[type="submit"]').disabled = previewMode;
+  document.getElementById('cms-hero-file').disabled = previewMode;
+  document.getElementById('cms-hero-upload-button').disabled = previewMode;
+  document.getElementById('cms-clear-hero').disabled = previewMode;
+  document.getElementById('cms-about-file').disabled = previewMode;
+  document.getElementById('cms-about-upload-button').disabled = previewMode;
+  document.getElementById('cms-clear-about-photo').disabled = previewMode;
+  document.getElementById('cms-background-file').disabled = previewMode;
+  document.getElementById('cms-background-upload-button').disabled = previewMode;
+  document.getElementById('cms-clear-background').disabled = previewMode;
+  document.querySelector('#website-post-form button[type="submit"]').disabled = previewMode;
+  document.getElementById('cms-post-file').disabled = previewMode;
+  document.getElementById('cms-post-upload-button').disabled = previewMode;
+  document.getElementById('cms-remove-post-photo').disabled = previewMode;
+  document.getElementById('cms-preview-banner').textContent = previewMode
+    ? 'Preview mode: edit text and see it update live. Sign in to save changes, upload photos, or publish stories.'
+    : '';
+}
+
+function queueWebsitePreviewUpdate() {
+  if (websitePreviewFrameId !== null) cancelAnimationFrame(websitePreviewFrameId);
+  websitePreviewFrameId = requestAnimationFrame(() => {
+    websitePreviewFrameId = null;
+    updateWebsiteLivePreview();
+  });
+}
+
+function refreshWebsitePreview() {
+  const frame = document.getElementById('cms-live-preview-frame');
+  frame.src = frame.src;
+}
+
+function updateWebsiteLivePreview() {
+  const frame = document.getElementById('cms-live-preview-frame');
+  if (!frame.contentWindow || !websiteContent) return;
+
+  function previewImageReference(target, url) {
+    if (!url) {
+      if (websitePreviewSentImages[target] !== null) {
+        frame.contentWindow.postMessage({
+          type: 'pointbreak-website-builder-image',
+          target,
+          url: null,
+        }, window.location.origin);
+        websitePreviewSentImages[target] = null;
+      }
+      return url;
+    }
+    if (!url.startsWith('data:')) return url;
+    if (websitePreviewSentImages[target] !== url) {
+      frame.contentWindow.postMessage({
+        type: 'pointbreak-website-builder-image',
+        target,
+        url,
+      }, window.location.origin);
+      websitePreviewSentImages[target] = url;
+    }
+    return `website-builder-preview:${target}`;
+  }
+
+  const content = {
+    ...websiteContentFromForm(),
+    heroImageUrl: previewImageReference('hero', cmsHeroPreviewUrl),
+    aboutImageUrl: previewImageReference('about', cmsAboutPreviewUrl),
+  };
+  content.theme.backgroundImageUrl = previewImageReference('background', cmsBackgroundPreviewUrl);
+  const editingId = cmsFieldValue('cms-post-id');
+  const posts = websitePosts.filter((post) => (websiteAdminPreviewMode || post.published) && post.id !== editingId);
+  const title = cmsFieldValue('cms-post-title').trim();
+  const summary = cmsFieldValue('cms-post-summary').trim();
+  const body = cmsFieldValue('cms-post-body').trim();
+  if (document.getElementById('cms-post-published').checked && (title || summary || body)) {
+    posts.unshift({
+      id: editingId || 'website-builder-unsaved-post',
+      title: title || 'Untitled story',
+      summary,
+      body,
+      image_alt: cmsFieldValue('cms-post-image-alt'),
+      imageUrl: previewImageReference('post', cmsPostPreviewUrl),
+      published_at: '',
+    });
+  }
+
+  frame.contentWindow.postMessage({
+    type: 'pointbreak-website-builder-preview',
+    content,
+    posts,
+  }, window.location.origin);
+}
+
+function setWebsitePreviewSize(size) {
+  const mobile = size === 'mobile';
+  document.getElementById('cms-live-preview-window').classList.toggle('is-mobile', mobile);
+  document.querySelectorAll('.cms-preview-size-btn').forEach((button) => {
+    const active = button.dataset.size === size;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function openWebsiteAdminAuth() {
+  websiteAdminAuthVisible = true;
+  renderWebsiteAdminState();
+  loadWebsiteAdminStatus();
+}
+
+function closeWebsiteAdminAuth() {
+  websiteAdminAuthVisible = false;
+  renderWebsiteAdminState();
+  if (websiteAdminPreviewMode) loadWebsiteEditorPreview();
+}
+
+async function loadWebsiteAdminStatus() {
+  const status = document.getElementById('website-admin-login-status');
+  const setupForm = document.getElementById('website-admin-setup');
+  const loginForm = document.getElementById('website-admin-login');
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/status`, { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not check website admin setup');
+    if (data.setupRequired) {
+      loginForm.hidden = true;
+      setupForm.hidden = !data.setupConfigured;
+      status.textContent = data.setupConfigured
+        ? 'Create the first independent website admin account.'
+        : 'The owner must configure WEBSITE_ADMIN_SETUP_KEY on the server before creating the first website admin.';
+      status.className = 'register-status';
+    } else {
+      loginForm.hidden = false;
+      setupForm.hidden = true;
+      status.textContent = '';
+      status.className = 'register-status';
+    }
+  } catch (error) {
+    status.textContent = error.message || 'Could not reach the website service';
+    status.className = 'register-status error';
+  }
+}
+
+function saveWebsiteAdminSession(data) {
+  websiteAdminToken = data.accessToken;
+  websiteAdminRefresh = data.refreshToken;
+  websiteAdminEmail = data.user.email;
+  localStorage.setItem('pb_website_admin_token', websiteAdminToken);
+  localStorage.setItem('pb_website_admin_refresh', websiteAdminRefresh);
+  localStorage.setItem('pb_website_admin_email', websiteAdminEmail);
+  websiteAdminAuthVisible = false;
+  renderWebsiteAdminState();
+  showTab('website');
+  loadWebsiteEditor();
+}
+
+async function websiteAdminLogin(event) {
+  event.preventDefault();
+  const status = document.getElementById('website-admin-login-status');
+  const email = document.getElementById('website-admin-email').value.trim();
+  const password = document.getElementById('website-admin-password').value;
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Website admin sign-in failed');
+    saveWebsiteAdminSession(data);
+    document.getElementById('website-admin-password').value = '';
+  } catch (error) {
+    status.textContent = error.message || 'Could not sign in to the website editor';
+    status.className = 'register-status error';
+  }
+}
+
+async function setupWebsiteAdmin(event) {
+  event.preventDefault();
+  const status = document.getElementById('website-admin-login-status');
+  const setupKey = document.getElementById('website-admin-setup-key').value;
+  const email = document.getElementById('website-admin-setup-email').value.trim();
+  const password = document.getElementById('website-admin-setup-password').value;
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ setupKey, email, password }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not create the website admin');
+    saveWebsiteAdminSession(data);
+    document.getElementById('website-admin-setup-key').value = '';
+    document.getElementById('website-admin-setup-password').value = '';
+  } catch (error) {
+    status.textContent = error.message || 'Could not create the website admin';
+    status.className = 'register-status error';
+  }
+}
+
+function websiteAdminLogout() {
+  websiteAdminToken = null;
+  websiteAdminRefresh = null;
+  websiteAdminEmail = null;
+  localStorage.removeItem('pb_website_admin_token');
+  localStorage.removeItem('pb_website_admin_refresh');
+  localStorage.removeItem('pb_website_admin_email');
+  websiteAdminAuthVisible = false;
+  cmsPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  cmsPreviewUrls.clear();
+  renderWebsiteAdminState();
+  loadWebsiteEditorPreview();
+}
+
+async function changeWebsiteAdminPassword() {
+  const oldPassword = prompt('Enter your current website admin password:');
+  if (oldPassword === null) return;
+  const newPassword = prompt('Enter a new password (at least 12 characters):');
+  if (newPassword === null) return;
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/password`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${websiteAdminToken}` },
+      body: JSON.stringify({ oldPassword, newPassword }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not change the password');
+    alert('Website admin password changed.');
+  } catch (error) {
+    alert(error.message || 'Could not change the password');
   }
 }
 
@@ -127,6 +466,8 @@ async function adminLogin() {
 function adminLogout() {
   adminToken = null;
   adminUserName = null;
+  cmsPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  cmsPreviewUrls.clear();
   localStorage.removeItem('pb_admin_token');
   localStorage.removeItem('pb_admin_refresh');
   localStorage.removeItem('pb_admin_user');
@@ -508,6 +849,7 @@ async function loadInitialData() {
   loadCounts();
   loadNotices();
   loadAccounts();
+  loadGuestBookings();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([
@@ -586,6 +928,7 @@ function connectSocket() {
 async function pollData() {
   if (!adminToken || !adminUserName) return;
   loadCounts();
+  loadGuestBookings();
   try {
     const headers = adminToken ? { 'Authorization': `Bearer ${adminToken}` } : {};
     const [ridesRes, driversRes] = await Promise.all([
@@ -677,10 +1020,77 @@ async function loadRoadside() {
 function renderAll() {
   loadRoadside();
   renderScheduled();
+  renderGuestBookings();
   renderStats();
   renderRides();
   renderDrivers();
   renderMap();
+}
+
+async function loadGuestBookings() {
+  if (!adminToken) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/guest-bookings`, {
+      headers: { 'Authorization': 'Bearer ' + adminToken },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    guestBookings = Array.isArray(data.bookings) ? data.bookings : [];
+    renderGuestBookings();
+  } catch (e) {
+    console.warn('Could not load guest transport requests:', e);
+  }
+}
+
+function renderGuestBookings() {
+  const list = document.getElementById('guest-booking-list');
+  const count = document.getElementById('guest-booking-count');
+  if (!list || !count) return;
+  const pending = guestBookings.filter((booking) => booking.status === 'pending').length;
+  count.textContent = `${pending} awaiting review · ${guestBookings.length} total`;
+  if (!guestBookings.length) {
+    list.innerHTML = '<p class="empty">No guest requests yet.</p>';
+    return;
+  }
+  list.innerHTML = guestBookings.map((booking) => {
+    const reviewed = booking.status !== 'pending';
+    const mail = `mailto:${encodeURIComponent(booking.email || '')}`;
+    return `<article class="ride-card ${escapeHtml(booking.status)}" style="margin-bottom:10px">
+      <div class="ride-header">
+        <strong>${escapeHtml(booking.name)}</strong>
+        <span class="status-badge ${escapeHtml(booking.status)}">${escapeHtml(booking.status)}</span>
+      </div>
+      <div><strong>When:</strong> ${escapeHtml(fmtFijiDateTime(parseDbUtc(booking.scheduled_at)))}</div>
+      <div><strong>Contact:</strong> <a href="${mail}">${escapeHtml(booking.email)}</a> · ${escapeHtml(booking.phone)}</div>
+      <div><strong>Pickup:</strong> ${escapeHtml(booking.pickup)} → <strong>Destination:</strong> ${escapeHtml(booking.dropoff)}</div>
+      <div><strong>Passengers:</strong> ${Number(booking.passengers)}</div>
+      ${booking.notes ? `<div><strong>Flight / notes:</strong> ${escapeHtml(booking.notes)}</div>` : ''}
+      ${reviewed ? `<div class="admin-hint" style="margin-top:8px">Reviewed ${escapeHtml(booking.updated_at || '')}</div>` : `
+        <div class="register-row" style="margin-top:10px">
+          <button class="reg-btn" onclick="reviewGuestBooking('${escapeHtml(booking.id)}','confirmed')">Confirm availability</button>
+          <button class="reg-btn reg-btn-ghost" onclick="reviewGuestBooking('${escapeHtml(booking.id)}','declined')">Decline request</button>
+        </div>`}
+    </article>`;
+  }).join('');
+}
+
+async function reviewGuestBooking(id, status) {
+  const booking = guestBookings.find((item) => item.id === id);
+  if (!booking || !['confirmed', 'declined'].includes(status)) return;
+  const action = status === 'confirmed' ? 'confirm availability for' : 'decline';
+  if (!confirm(`Are you sure you want to ${action} ${booking.name}'s transport request?`)) return;
+  try {
+    const res = await fetch(`${API_URL}/api/admin/guest-bookings/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + adminToken },
+      body: JSON.stringify({ status }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.error || 'Could not update this request'); return; }
+    await loadGuestBookings();
+  } catch (e) {
+    alert('Could not reach the server. Please try again.');
+  }
 }
 
 const ACTIVE_RIDE_STATUSES = ['requested', 'accepted', 'arrived', 'picking_up', 'in_progress'];
@@ -1078,16 +1488,747 @@ async function assignDriver(driverId) {
   }
 }
 
+// ---- Public website content and news editor ----
+function jumpCmsSection(id) {
+  const section = document.getElementById(id);
+  if (section) section.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function cmsFieldValue(id) {
+  return document.getElementById(id).value;
+}
+
+function setCmsImagePreview(elementId, nameId, imageId, media) {
+  const image = document.getElementById(elementId);
+  const name = document.getElementById(nameId);
+  const clearButton = elementId === 'cms-hero-preview'
+    ? document.getElementById('cms-clear-hero')
+    : document.getElementById('cms-remove-post-photo');
+  if (!imageId) {
+    image.hidden = true;
+    image.removeAttribute('src');
+    name.textContent = '';
+    clearButton.hidden = true;
+    return;
+  }
+  const item = media.find((entry) => entry.id === imageId);
+  name.textContent = item ? item.name : 'Selected photo';
+  clearButton.hidden = false;
+  image.hidden = false;
+  if (cmsPreviewUrls.has(imageId)) {
+    image.src = cmsPreviewUrls.get(imageId);
+    if (elementId === 'cms-post-preview') {
+      cmsPostPreviewUrl = image.src;
+      queueWebsitePreviewUpdate();
+    }
+    return;
+  }
+  fetch(`${API_URL}/api/admin/website/media/${encodeURIComponent(imageId)}`)
+    .then((response) => {
+      if (!response.ok) throw new Error('Photo preview unavailable');
+      return response.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      cmsPreviewUrls.set(imageId, url);
+      image.src = url;
+      if (imageId === cmsPostImageId) {
+        cmsPostPreviewUrl = url;
+        queueWebsitePreviewUpdate();
+      }
+    })
+    .catch(() => {
+      image.hidden = true;
+      name.textContent = 'Photo preview could not be loaded.';
+    });
+}
+
+async function loadWebsiteEditorPreview() {
+  const status = document.getElementById('website-content-status');
+  websiteAdminPreviewMode = true;
+  setWebsiteEditorPreviewMode(true);
+  try {
+    const response = await nativeFetch(`${API_URL}/api/website/`, { cache: 'no-store' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not load the website preview');
+    websiteContent = data.content;
+    websitePosts = data.posts || [];
+    websiteMedia = [];
+    cmsHeroPreviewUrl = websiteContent.heroImageUrl || null;
+    fillWebsiteContentForm(websiteContent);
+    resetWebsitePostForm();
+
+    const heroImage = document.getElementById('cms-hero-preview');
+    const heroName = document.getElementById('cms-hero-name');
+    if (websiteContent.heroImageUrl) {
+      heroImage.src = new URL(websiteContent.heroImageUrl, API_URL).href;
+      heroImage.hidden = false;
+      heroName.textContent = 'Current public homepage photo';
+    } else {
+      heroImage.hidden = true;
+      heroImage.removeAttribute('src');
+      heroName.textContent = 'Original artwork';
+    }
+    document.getElementById('cms-clear-hero').hidden = true;
+    renderWebsitePosts();
+    renderWebsiteMedia();
+    status.textContent = 'Preview loaded. Edit the text to see it update live.';
+    status.className = 'register-status';
+    queueWebsitePreviewUpdate();
+  } catch (error) {
+    status.textContent = error.message || 'Could not load the website preview';
+    status.className = 'register-status error';
+  }
+}
+
+function fillWebsiteContentForm(content) {
+  const fields = {
+    'cms-hero-eyebrow': content.heroEyebrow,
+    'cms-hero-title': content.heroTitle,
+    'cms-hero-emphasis': content.heroEmphasis,
+    'cms-hero-body': content.heroBody,
+    'cms-hero-book-label': content.heroBookLabel,
+    'cms-hero-about-label': content.heroAboutLabel,
+    'cms-hero-note': content.heroNote,
+    'cms-hero-card-kicker': content.heroCardKicker,
+    'cms-hero-card-title': content.heroCardTitle,
+    'cms-hero-pickup-label': content.heroPickupLabel,
+    'cms-hero-destination-label': content.heroDestinationLabel,
+    'cms-hero-card-button': content.heroCardButton,
+    'cms-hero-card-foot': content.heroCardFoot,
+    'cms-intro-label': content.introLabel,
+    'cms-intro-text': content.introText,
+    'cms-features-kicker': content.featuresKicker,
+    'cms-features-title': content.featuresTitle,
+    'cms-features-lead': content.featuresLead,
+    'cms-rides-kicker': content.ridesKicker,
+    'cms-rides-title': content.ridesTitle,
+    'cms-rides-lead': content.ridesLead,
+    'cms-driver-kicker': content.driverKicker,
+    'cms-driver-title': content.driverTitle,
+    'cms-driver-body': content.driverBody,
+    'cms-driver-link': content.driverLink,
+    'cms-booking-kicker': content.bookingKicker,
+    'cms-booking-title': content.bookingTitle,
+    'cms-booking-lead': content.bookingLead,
+    'cms-booking-note': content.bookingNote,
+    'cms-booking-form-title': content.bookingFormTitle,
+    'cms-booking-location-hint': content.bookingLocationHint,
+    'cms-booking-submit': content.bookingSubmitLabel,
+    'cms-news-kicker': content.newsKicker,
+    'cms-news-title': content.newsTitle,
+    'cms-about-title': content.aboutTitle,
+    'cms-about-body': content.aboutBody,
+    'cms-about-second': content.aboutSecondBody,
+    'cms-about-image-alt': content.aboutImageAlt,
+    'cms-about-kicker': content.aboutKicker,
+    'cms-about-link': content.aboutLink,
+    'cms-contact-kicker': content.contactKicker,
+    'cms-contact-title': content.contactTitle,
+    'cms-contact-lead': content.contactLead,
+    'cms-contact-email': content.contactEmail,
+    'cms-contact-phone': content.contactPhone,
+    'cms-contact-email-label': content.contactEmailLabel,
+    'cms-contact-foot': content.contactFoot,
+    'cms-contact-form-title': content.contactFormTitle,
+    'cms-contact-form-hint': content.contactFormHint,
+    'cms-contact-form-button': content.contactFormButton,
+    'cms-footer-tagline': content.footerTagline,
+  };
+  Object.entries(fields).forEach(([id, value]) => { document.getElementById(id).value = value || ''; });
+  (content.features || []).forEach((feature, index) => {
+    document.getElementById(`cms-feature-title-${index}`).value = feature.title || '';
+    document.getElementById(`cms-feature-body-${index}`).value = feature.body || '';
+  });
+  (content.rides || []).forEach((ride, index) => {
+    document.getElementById(`cms-ride-title-${index}`).value = ride.title || '';
+    document.getElementById(`cms-ride-label-${index}`).value = ride.label || '';
+    document.getElementById(`cms-ride-body-${index}`).value = ride.body || '';
+  });
+  cmsHeroImageId = content.heroImageId || null;
+  cmsAboutImageId = content.aboutImageId || null;
+  cmsAboutPreviewUrl = content.aboutImageUrl ||
+    (cmsAboutImageId ? `/api/website/media/${encodeURIComponent(cmsAboutImageId)}` : null);
+  setWebsiteAboutPreview(cmsAboutPreviewUrl, cmsAboutImageId ? 'Current About photo' : '');
+  const theme = content.theme || {};
+  document.getElementById('cms-theme-background').value = theme.backgroundColor || '#0A1628';
+  document.getElementById('cms-theme-surface').value = theme.surfaceColor || '#1A2B3D';
+  document.getElementById('cms-theme-accent').value = theme.accentColor || '#33AADD';
+  document.getElementById('cms-theme-text').value = theme.textColor || '#FFFFFF';
+  document.getElementById('cms-theme-border').value = theme.borderColor || '#2A3B4D';
+  document.getElementById('cms-theme-radius').value = String(theme.borderRadius == null ? 12 : theme.borderRadius);
+  document.getElementById('cms-theme-preset').value = 'custom';
+  cmsBackgroundImageId = theme.backgroundImageId || null;
+  cmsBackgroundPreviewUrl = theme.backgroundImageUrl ||
+    (cmsBackgroundImageId ? `/api/website/media/${encodeURIComponent(cmsBackgroundImageId)}` : null);
+  setWebsiteBackgroundPreview(cmsBackgroundPreviewUrl, cmsBackgroundImageId ? 'Current website background photo' : '');
+  cmsSectionOrder = Array.isArray(content.sectionOrder)
+    ? [...content.sectionOrder]
+    : Object.keys(websiteSectionNames);
+  renderWebsiteSectionOrder(cmsSectionOrder);
+  renderWebsiteLinkFields(Array.isArray(content.links) ? content.links : []);
+}
+
+const websiteThemePresets = {
+  lagoon: { backgroundColor: '#10243B', surfaceColor: '#1A2B3D', accentColor: '#2EB2A5', textColor: '#FFFFFF', borderColor: '#3A5264' },
+  coral: { backgroundColor: '#251B28', surfaceColor: '#382532', accentColor: '#E88972', textColor: '#FFF7EF', borderColor: '#594151' },
+  earth: { backgroundColor: '#19261C', surfaceColor: '#263629', accentColor: '#D0A66B', textColor: '#FFF9EF', borderColor: '#48543F' },
+};
+
+function applyWebsiteThemePreset() {
+  const preset = websiteThemePresets[document.getElementById('cms-theme-preset').value];
+  if (!preset) return;
+  Object.entries(preset).forEach(([key, value]) => {
+    const control = document.getElementById(`cms-theme-${key.replace('Color', '').replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`);
+    if (control) control.value = value;
+  });
+  queueWebsitePreviewUpdate();
+}
+
+function renderWebsiteSectionOrder(order) {
+  const list = document.getElementById('cms-section-order');
+  if (!list) return;
+  list.replaceChildren();
+  order.forEach((section, index) => {
+    const item = document.createElement('li');
+    item.className = 'cms-section-order-item';
+    const label = document.createElement('span');
+    label.className = 'cms-section-order-label';
+    label.textContent = `${index + 1}. ${websiteSectionNames[section] || section}`;
+    const actions = document.createElement('div');
+    actions.className = 'cms-section-order-actions';
+    [-1, 1].forEach((direction) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.textContent = direction < 0 ? '↑' : '↓';
+      button.setAttribute('aria-label', `Move ${websiteSectionNames[section] || section} ${direction < 0 ? 'up' : 'down'}`);
+      button.disabled = direction < 0 ? index === 0 : index === order.length - 1;
+      button.addEventListener('click', () => moveWebsiteSection(section, direction));
+      actions.appendChild(button);
+    });
+    item.append(label, actions);
+    list.appendChild(item);
+  });
+}
+
+function moveWebsiteSection(section, direction) {
+  const index = cmsSectionOrder.indexOf(section);
+  const next = index + direction;
+  if (index < 0 || next < 0 || next >= cmsSectionOrder.length) return;
+  [cmsSectionOrder[index], cmsSectionOrder[next]] = [cmsSectionOrder[next], cmsSectionOrder[index]];
+  renderWebsiteSectionOrder(cmsSectionOrder);
+  queueWebsitePreviewUpdate();
+}
+
+function renderWebsiteLinkFields(links) {
+  const container = document.getElementById('cms-custom-links');
+  if (!container) return;
+  container.replaceChildren();
+  for (let index = 0; index < 8; index += 1) {
+    const link = links[index] || {};
+    const row = document.createElement('div');
+    row.className = 'cms-link-row';
+    [['label', 'Link label'], ['url', 'URL or section (#about)']].forEach(([field, hint]) => {
+      const label = document.createElement('label');
+      label.className = 'cms-field';
+      label.textContent = `Link ${index + 1} ${hint}`;
+      const input = document.createElement('input');
+      input.className = 'reg-input';
+      input.type = 'text';
+      input.maxLength = field === 'label' ? 40 : 300;
+      input.dataset.linkField = field;
+      input.value = link[field] || '';
+      label.appendChild(input);
+      row.appendChild(label);
+    });
+    container.appendChild(row);
+  }
+}
+
+function setWebsiteBackgroundPreview(url, name) {
+  const image = document.getElementById('cms-background-preview');
+  const clearButton = document.getElementById('cms-clear-background');
+  image.hidden = !url;
+  if (url) image.src = new URL(url, API_URL).href;
+  else image.removeAttribute('src');
+  document.getElementById('cms-background-name').textContent = name || 'Optional; shown softly behind the page content.';
+  clearButton.hidden = !url;
+}
+
+function setWebsiteAboutPreview(url, name) {
+  const image = document.getElementById('cms-about-preview');
+  const clearButton = document.getElementById('cms-clear-about-photo');
+  image.hidden = !url;
+  if (url) image.src = new URL(url, API_URL).href;
+  else image.removeAttribute('src');
+  document.getElementById('cms-about-photo-name').textContent = name || 'The decorative Fiji artwork is shown when no photo is selected.';
+  clearButton.hidden = !url;
+}
+
+async function loadWebsiteEditor() {
+  if (websiteAdminPreviewMode) {
+    loadWebsiteEditorPreview();
+    return;
+  }
+  if (!websiteAdminToken) return;
+  const status = document.getElementById('website-content-status');
+  try {
+    const response = await fetch(`${API_URL}/api/admin/website`);
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not load website content');
+    websiteContent = data.content;
+    websitePosts = data.posts || [];
+    websiteMedia = data.media || [];
+    fillWebsiteContentForm(websiteContent);
+    cmsHeroPreviewUrl = cmsHeroImageId
+      ? `/api/website/media/${encodeURIComponent(cmsHeroImageId)}`
+      : null;
+    setCmsImagePreview('cms-hero-preview', 'cms-hero-name', cmsHeroImageId, websiteMedia);
+    renderWebsitePosts();
+    renderWebsiteMedia();
+    status.textContent = 'Website content loaded.';
+    status.className = 'register-status ok';
+    queueWebsitePreviewUpdate();
+  } catch (error) {
+    status.textContent = error.message || 'Could not load website content';
+    status.className = 'register-status error';
+  }
+}
+
+function websiteContentFromForm() {
+  return {
+    heroEyebrow: cmsFieldValue('cms-hero-eyebrow'),
+    heroTitle: cmsFieldValue('cms-hero-title'),
+    heroEmphasis: cmsFieldValue('cms-hero-emphasis'),
+    heroBody: cmsFieldValue('cms-hero-body'),
+    heroBookLabel: cmsFieldValue('cms-hero-book-label'),
+    heroAboutLabel: cmsFieldValue('cms-hero-about-label'),
+    heroNote: cmsFieldValue('cms-hero-note'),
+    heroCardKicker: cmsFieldValue('cms-hero-card-kicker'),
+    heroCardTitle: cmsFieldValue('cms-hero-card-title'),
+    heroPickupLabel: cmsFieldValue('cms-hero-pickup-label'),
+    heroDestinationLabel: cmsFieldValue('cms-hero-destination-label'),
+    heroCardButton: cmsFieldValue('cms-hero-card-button'),
+    heroCardFoot: cmsFieldValue('cms-hero-card-foot'),
+    introLabel: cmsFieldValue('cms-intro-label'),
+    introText: cmsFieldValue('cms-intro-text'),
+    featuresKicker: cmsFieldValue('cms-features-kicker'),
+    featuresTitle: cmsFieldValue('cms-features-title'),
+    featuresLead: cmsFieldValue('cms-features-lead'),
+    ridesKicker: cmsFieldValue('cms-rides-kicker'),
+    ridesTitle: cmsFieldValue('cms-rides-title'),
+    ridesLead: cmsFieldValue('cms-rides-lead'),
+    driverKicker: cmsFieldValue('cms-driver-kicker'),
+    driverTitle: cmsFieldValue('cms-driver-title'),
+    driverBody: cmsFieldValue('cms-driver-body'),
+    driverLink: cmsFieldValue('cms-driver-link'),
+    bookingKicker: cmsFieldValue('cms-booking-kicker'),
+    bookingTitle: cmsFieldValue('cms-booking-title'),
+    bookingLead: cmsFieldValue('cms-booking-lead'),
+    bookingNote: cmsFieldValue('cms-booking-note'),
+    bookingFormTitle: cmsFieldValue('cms-booking-form-title'),
+    bookingLocationHint: cmsFieldValue('cms-booking-location-hint'),
+    bookingSubmitLabel: cmsFieldValue('cms-booking-submit'),
+    newsKicker: cmsFieldValue('cms-news-kicker'),
+    newsTitle: cmsFieldValue('cms-news-title'),
+    features: [0, 1, 2].map((index) => ({
+      title: cmsFieldValue(`cms-feature-title-${index}`),
+      body: cmsFieldValue(`cms-feature-body-${index}`),
+    })),
+    rides: [0, 1].map((index) => ({
+      title: cmsFieldValue(`cms-ride-title-${index}`),
+      label: cmsFieldValue(`cms-ride-label-${index}`),
+      body: cmsFieldValue(`cms-ride-body-${index}`),
+    })),
+    aboutTitle: cmsFieldValue('cms-about-title'),
+    aboutBody: cmsFieldValue('cms-about-body'),
+    aboutSecondBody: cmsFieldValue('cms-about-second'),
+    aboutImageAlt: cmsFieldValue('cms-about-image-alt'),
+    aboutKicker: cmsFieldValue('cms-about-kicker'),
+    aboutLink: cmsFieldValue('cms-about-link'),
+    contactKicker: cmsFieldValue('cms-contact-kicker'),
+    contactTitle: cmsFieldValue('cms-contact-title'),
+    contactLead: cmsFieldValue('cms-contact-lead'),
+    contactEmail: cmsFieldValue('cms-contact-email'),
+    contactPhone: cmsFieldValue('cms-contact-phone'),
+    contactEmailLabel: cmsFieldValue('cms-contact-email-label'),
+    contactFoot: cmsFieldValue('cms-contact-foot'),
+    contactFormTitle: cmsFieldValue('cms-contact-form-title'),
+    contactFormHint: cmsFieldValue('cms-contact-form-hint'),
+    contactFormButton: cmsFieldValue('cms-contact-form-button'),
+    footerTagline: cmsFieldValue('cms-footer-tagline'),
+    heroImageId: cmsHeroImageId,
+    aboutImageId: cmsAboutImageId,
+    theme: {
+      backgroundColor: cmsFieldValue('cms-theme-background'),
+      surfaceColor: cmsFieldValue('cms-theme-surface'),
+      accentColor: cmsFieldValue('cms-theme-accent'),
+      textColor: cmsFieldValue('cms-theme-text'),
+      borderColor: cmsFieldValue('cms-theme-border'),
+      borderRadius: Number(cmsFieldValue('cms-theme-radius')),
+      backgroundImageId: cmsBackgroundImageId,
+    },
+    sectionOrder: [...cmsSectionOrder],
+    links: [...document.querySelectorAll('#cms-custom-links .cms-link-row')].map((row) => ({
+      label: row.querySelector('[data-link-field="label"]').value.trim(),
+      url: row.querySelector('[data-link-field="url"]').value.trim(),
+    })).filter((link) => link.label || link.url),
+  };
+}
+
+async function saveWebsiteContent(event) {
+  event.preventDefault();
+  if (websiteAdminPreviewMode) return;
+  const status = document.getElementById('website-content-status');
+  const button = event.currentTarget.querySelector('button[type="submit"]');
+  button.disabled = true;
+  status.textContent = 'Saving…';
+  status.className = 'register-status';
+  try {
+    const response = await fetch(`${API_URL}/api/admin/website/content`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(websiteContentFromForm()),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not save website content');
+    websiteContent = data.content;
+    status.textContent = 'Website changes saved and live.';
+    status.className = 'register-status ok';
+    await loadWebsiteEditor();
+    status.textContent = 'Website changes saved and live.';
+    status.className = 'register-status ok';
+  } catch (error) {
+    status.textContent = error.message || 'Could not save website content';
+    status.className = 'register-status error';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+function readWebsitePhoto(file) {
+  return new Promise((resolve, reject) => {
+    if (!file || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      reject(new Error('Choose a JPG, PNG or WebP photo.'));
+      return;
+    }
+    if (file.size < 1 || file.size > 3 * 1024 * 1024) {
+      reject(new Error('Photo must be 3 MB or smaller.'));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = String(reader.result || '').split(',')[1];
+      if (!data) reject(new Error('Could not read the selected photo.'));
+      else resolve(data);
+    };
+    reader.onerror = () => reject(new Error('Could not read the selected photo.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadWebsitePhoto(event, target) {
+  if (websiteAdminPreviewMode) return;
+  const file = event.currentTarget.files && event.currentTarget.files[0];
+  event.currentTarget.value = '';
+  if (!file) return;
+  const status = target === 'post'
+    ? document.getElementById('website-post-status')
+    : document.getElementById('website-content-status');
+  status.textContent = 'Uploading photo…';
+  status.className = 'register-status';
+  try {
+    const data = await readWebsitePhoto(file);
+    const previewUrl = `data:${file.type};base64,${data}`;
+    const response = await fetch(`${API_URL}/api/admin/website/media`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: file.name, mime: file.type, data }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(result.error || 'Photo upload failed');
+    websiteMedia.unshift(result.media);
+    if (target === 'hero') {
+      cmsHeroImageId = result.media.id;
+      cmsHeroPreviewUrl = previewUrl;
+      setCmsImagePreview('cms-hero-preview', 'cms-hero-name', cmsHeroImageId, websiteMedia);
+    } else if (target === 'about') {
+      cmsAboutImageId = result.media.id;
+      cmsAboutPreviewUrl = previewUrl;
+      setWebsiteAboutPreview(cmsAboutPreviewUrl, file.name);
+    } else if (target === 'background') {
+      cmsBackgroundImageId = result.media.id;
+      cmsBackgroundPreviewUrl = previewUrl;
+      setWebsiteBackgroundPreview(cmsBackgroundPreviewUrl, file.name);
+    } else {
+      cmsPostImageId = result.media.id;
+      cmsPostPreviewUrl = previewUrl;
+      setCmsImagePreview('cms-post-preview', 'cms-post-photo-name', cmsPostImageId, websiteMedia);
+    }
+    renderWebsiteMedia();
+    status.textContent = 'Photo uploaded. Save the website changes or story to publish it.';
+    status.className = 'register-status ok';
+    queueWebsitePreviewUpdate();
+  } catch (error) {
+    status.textContent = error.message || 'Photo upload failed';
+    status.className = 'register-status error';
+  }
+}
+
+function clearWebsiteHero() {
+  cmsHeroImageId = null;
+  cmsHeroPreviewUrl = null;
+  setCmsImagePreview('cms-hero-preview', 'cms-hero-name', null, websiteMedia);
+  queueWebsitePreviewUpdate();
+}
+
+function clearWebsiteAboutPhoto() {
+  cmsAboutImageId = null;
+  cmsAboutPreviewUrl = null;
+  setWebsiteAboutPreview(null, '');
+  queueWebsitePreviewUpdate();
+}
+
+function clearWebsiteBackground() {
+  cmsBackgroundImageId = null;
+  cmsBackgroundPreviewUrl = null;
+  setWebsiteBackgroundPreview(null, '');
+  queueWebsitePreviewUpdate();
+}
+
+function clearWebsitePostPhoto() {
+  cmsPostImageId = null;
+  cmsPostPreviewUrl = null;
+  setCmsImagePreview('cms-post-preview', 'cms-post-photo-name', null, websiteMedia);
+  queueWebsitePreviewUpdate();
+}
+
+function renderWebsitePosts() {
+  const list = document.getElementById('cms-post-list');
+  const count = document.getElementById('cms-post-count');
+  count.textContent = `${websitePosts.length} saved`;
+  list.replaceChildren();
+  if (!websitePosts.length) {
+    list.innerHTML = websiteAdminPreviewMode
+      ? '<p class="empty">No published stories to preview yet.</p>'
+      : '<p class="empty">No stories yet. Create your first post above.</p>';
+    return;
+  }
+  websitePosts.forEach((post) => {
+    const card = document.createElement('article');
+    card.className = 'cms-post-card';
+    const imageId = post.image_id;
+    if (websiteAdminPreviewMode && post.imageUrl) {
+      const image = document.createElement('img');
+      image.className = 'cms-thumb';
+      image.alt = '';
+      image.src = new URL(post.imageUrl, API_URL).href;
+      card.appendChild(image);
+    } else if (imageId) {
+      const image = document.createElement('img');
+      image.className = 'cms-thumb';
+      image.alt = '';
+      setCmsImagePreviewForElement(image, imageId);
+      card.appendChild(image);
+    }
+    const copy = document.createElement('div');
+    copy.className = 'cms-post-copy';
+    const title = document.createElement('strong');
+    title.textContent = post.title;
+    const detail = document.createElement('span');
+    detail.className = 'admin-hint';
+    detail.textContent = `${websiteAdminPreviewMode ? 'Published' : post.published ? 'Published' : 'Draft'} · ${post.updated_at || post.published_at || ''}`;
+    copy.append(title, detail);
+    card.append(copy);
+    if (!websiteAdminPreviewMode) {
+      const actions = document.createElement('div');
+      actions.className = 'cms-post-actions';
+      const edit = document.createElement('button');
+      edit.type = 'button';
+      edit.className = 'reg-btn reg-btn-ghost';
+      edit.textContent = 'Edit';
+      edit.addEventListener('click', () => editWebsitePost(post.id));
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'reg-btn reg-btn-ghost';
+      remove.textContent = 'Delete';
+      remove.addEventListener('click', () => deleteWebsitePost(post.id));
+      actions.append(edit, remove);
+      card.append(actions);
+    }
+    list.appendChild(card);
+  });
+}
+
+function setCmsImagePreviewForElement(image, imageId) {
+  if (cmsPreviewUrls.has(imageId)) {
+    image.src = cmsPreviewUrls.get(imageId);
+    return;
+  }
+  fetch(`${API_URL}/api/admin/website/media/${encodeURIComponent(imageId)}`)
+    .then((response) => {
+      if (!response.ok) throw new Error('Photo preview unavailable');
+      return response.blob();
+    })
+    .then((blob) => {
+      const url = URL.createObjectURL(blob);
+      cmsPreviewUrls.set(imageId, url);
+      image.src = url;
+    })
+    .catch(() => { image.hidden = true; });
+}
+
+function renderWebsiteMedia() {
+  const list = document.getElementById('cms-media-list');
+  list.replaceChildren();
+  if (!websiteMedia.length) {
+    list.innerHTML = `<p class="empty">${websiteAdminPreviewMode ? 'Sign in to view the private photo library.' : 'No photos uploaded.'}</p>`;
+    return;
+  }
+  websiteMedia.forEach((media) => {
+    const used = (websiteContent && websiteContent.heroImageId === media.id) ||
+      (websiteContent && websiteContent.aboutImageId === media.id) ||
+      (websiteContent && websiteContent.theme && websiteContent.theme.backgroundImageId === media.id) ||
+      websitePosts.some((post) => post.image_id === media.id) ||
+      cmsHeroImageId === media.id || cmsAboutImageId === media.id ||
+      cmsBackgroundImageId === media.id || cmsPostImageId === media.id;
+    const card = document.createElement('div');
+    card.className = 'cms-media-card';
+    const image = document.createElement('img');
+    image.className = 'cms-thumb';
+    image.alt = '';
+    setCmsImagePreviewForElement(image, media.id);
+    const copy = document.createElement('div');
+    copy.className = 'cms-media-copy';
+    const title = document.createElement('strong');
+    title.className = 'cms-photo-name';
+    title.textContent = media.name;
+    const detail = document.createElement('span');
+    detail.className = 'admin-hint';
+    detail.textContent = `${media.mime} · ${(media.size / (1024 * 1024)).toFixed(2)} MB${used ? ' · in use' : ''}`;
+    copy.append(title, detail);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'reg-btn reg-btn-ghost';
+    remove.textContent = 'Delete';
+    remove.disabled = used;
+    remove.title = used ? 'Remove this photo from published content before deleting it' : '';
+    remove.addEventListener('click', () => deleteWebsiteMedia(media.id));
+    card.append(image, copy, remove);
+    list.appendChild(card);
+  });
+}
+
+function resetWebsitePostForm() {
+  document.getElementById('website-post-form').reset();
+  document.getElementById('cms-post-id').value = '';
+  document.getElementById('cms-post-form-title').textContent = 'Create news or a photo post';
+  document.getElementById('cms-post-save').textContent = 'Save story';
+  document.getElementById('website-post-status').textContent = '';
+  cmsPostImageId = null;
+  cmsPostPreviewUrl = null;
+  setCmsImagePreview('cms-post-preview', 'cms-post-photo-name', null, websiteMedia);
+  queueWebsitePreviewUpdate();
+}
+
+function editWebsitePost(id) {
+  const post = websitePosts.find((entry) => entry.id === id);
+  if (!post) return;
+  document.getElementById('cms-post-id').value = post.id;
+  document.getElementById('cms-post-title').value = post.title;
+  document.getElementById('cms-post-summary').value = post.summary;
+  document.getElementById('cms-post-body').value = post.body;
+  document.getElementById('cms-post-image-alt').value = post.image_alt || '';
+  document.getElementById('cms-post-published').checked = post.published;
+  document.getElementById('cms-post-form-title').textContent = 'Edit news or photo post';
+  document.getElementById('cms-post-save').textContent = 'Save story';
+  cmsPostImageId = post.image_id || null;
+  cmsPostPreviewUrl = post.imageUrl ||
+    (post.published && cmsPostImageId ? `/api/website/media/${encodeURIComponent(cmsPostImageId)}` : null);
+  setCmsImagePreview('cms-post-preview', 'cms-post-photo-name', cmsPostImageId, websiteMedia);
+  document.getElementById('website-post-status').textContent = '';
+  document.getElementById('cms-post-form-title').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  queueWebsitePreviewUpdate();
+}
+
+async function saveWebsitePost(event) {
+  event.preventDefault();
+  if (websiteAdminPreviewMode) return;
+  const status = document.getElementById('website-post-status');
+  const button = document.getElementById('cms-post-save');
+  const id = cmsFieldValue('cms-post-id');
+  button.disabled = true;
+  status.textContent = 'Saving…';
+  status.className = 'register-status';
+  try {
+    const response = await fetch(`${API_URL}/api/admin/website/posts${id ? `/${encodeURIComponent(id)}` : ''}`, {
+      method: id ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: cmsFieldValue('cms-post-title'),
+        summary: cmsFieldValue('cms-post-summary'),
+        body: cmsFieldValue('cms-post-body'),
+        imageId: cmsPostImageId,
+        imageAlt: cmsFieldValue('cms-post-image-alt'),
+        published: document.getElementById('cms-post-published').checked,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not save this story');
+    const successMessage = data.post.published ? 'Story published on the public website.' : 'Draft saved. It is not public yet.';
+    resetWebsitePostForm();
+    await loadWebsiteEditor();
+    status.textContent = successMessage;
+    status.className = 'register-status ok';
+  } catch (error) {
+    status.textContent = error.message || 'Could not save this story';
+    status.className = 'register-status error';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function deleteWebsitePost(id) {
+  const post = websitePosts.find((entry) => entry.id === id);
+  if (!post || !confirm(`Delete "${post.title}" from the website? This cannot be undone.`)) return;
+  try {
+    const response = await fetch(`${API_URL}/api/admin/website/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not delete the story');
+    await loadWebsiteEditor();
+  } catch (error) {
+    alert(error.message || 'Could not delete the story');
+  }
+}
+
+async function deleteWebsiteMedia(id) {
+  const media = websiteMedia.find((entry) => entry.id === id);
+  if (!media || !confirm(`Delete photo "${media.name}"?`)) return;
+  try {
+    const response = await fetch(`${API_URL}/api/admin/website/media/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || 'Could not delete the photo');
+    const url = cmsPreviewUrls.get(id);
+    if (url) URL.revokeObjectURL(url);
+    cmsPreviewUrls.delete(id);
+    await loadWebsiteEditor();
+  } catch (error) {
+    alert(error.message || 'Could not delete the photo');
+  }
+}
 
 // ---- Tabs ----
 function showTab(name) {
-  if (!['live','bookings','messaging','users','ai'].includes(name)) name = 'live';
+  const allowedTabs = websiteAdminMode
+    ? ['website']
+    : ['live', 'bookings', 'messaging', 'users', 'ai'];
+  if (!allowedTabs.includes(name)) name = websiteAdminMode ? 'website' : 'live';
   document.querySelectorAll('[data-tab]').forEach(el => el.classList.toggle('tab-hidden', el.dataset.tab !== name));
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.go === name));
   try { localStorage.setItem('pb-admin-tab', name); } catch (e) {}
   if (name === 'live' && typeof liveMap !== 'undefined' && liveMap) setTimeout(() => liveMap.invalidateSize(), 50);
 }
-showTab((location.hash || '').slice(1) || (function () { try { return localStorage.getItem('pb-admin-tab'); } catch (e) { return null; } })() || 'live');
+showTab(websiteAdminMode ? 'website' : (location.hash || '').slice(1) || (function () { try { return localStorage.getItem('pb-admin-tab'); } catch (e) { return null; } })() || 'live');
 window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (h) showTab(h); });
 
 // ---- AI assistant ----

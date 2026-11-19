@@ -15,6 +15,7 @@ import { isDriverApp, setDriverMode, DEMO_RIDER, DEMO_DRIVER, DEMO_ENABLED } fro
 
 type Doc = { type: string; mime: string; data: string; name: string };
 const DOC_LABELS: Record<string, string> = { passport: "Passport", tin: "TIN ID", voters_card: "Voter's card" };
+const screenColors = colors;
 
 function pickFile(camera: boolean): Promise<File | null> {
   return new Promise((resolve) => {
@@ -64,9 +65,10 @@ async function toDocument(file: File, type: string): Promise<Doc> {
 
 type Props = {
   onLogin: (user: User) => void;
+  onBackToLanding?: () => void;
 };
 
-export default function LoginScreen({ onLogin }: Props) {
+export default function LoginScreen({ onLogin, onBackToLanding }: Props) {
   const [driverApp, setDriverAppState] = useState(isDriverApp());
   const demo = DEMO_ENABLED;
   const [mode, setMode] = useState<"login" | "register" | "verify" | "forgot" | "reset">("login");
@@ -234,7 +236,7 @@ export default function LoginScreen({ onLogin }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={{ flex: 1, backgroundColor: colors.deep }}
+      style={{ flex: 1, backgroundColor: screenColors.deep }}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
@@ -242,8 +244,17 @@ export default function LoginScreen({ onLogin }: Props) {
         contentContainerStyle={styles.safe}
         keyboardShouldPersistTaps="handled"
       >
+        {onBackToLanding ? (
+          <TouchableOpacity style={styles.backToSite} onPress={onBackToLanding}>
+            <Text style={styles.backToSiteText}>← Back to Pointbreak</Text>
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.hero}>
-          <Text style={styles.logo}>{driverApp ? "🚕" : "🏄"}</Text>
+          {Platform.OS === "web" ? (
+            <View style={styles.webLogo}><Text style={styles.webLogoText}>P</Text></View>
+          ) : (
+            <Text style={styles.logo}>{driverApp ? "🚕" : "🏄"}</Text>
+          )}
           <Text style={styles.logoWave}>~ · ~ · ~</Text>
           <Text style={styles.title}>{driverApp ? "Pointbreak Driver" : "Pointbreak Fiji Rides"}</Text>
           <Text style={styles.tagline}>
@@ -298,7 +309,7 @@ export default function LoginScreen({ onLogin }: Props) {
               <TextInput
                 style={styles.input}
                 placeholder="Full name"
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={screenColors.textMuted}
                 value={name}
                 onChangeText={setName}
               />
@@ -314,7 +325,7 @@ export default function LoginScreen({ onLogin }: Props) {
             <TextInput
               style={styles.input}
               placeholder="Phone (e.g. +679…)"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={screenColors.textMuted}
               value={phone}
               onChangeText={setPhone}
               keyboardType="phone-pad"
@@ -328,7 +339,7 @@ export default function LoginScreen({ onLogin }: Props) {
             <TextInput
               style={styles.input}
               placeholder="Email address"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={screenColors.textMuted}
               value={email}
               onChangeText={setEmail}
               keyboardType="email-address"
@@ -340,7 +351,7 @@ export default function LoginScreen({ onLogin }: Props) {
             <TextInput
               style={styles.input}
               placeholder="6-digit code from your email"
-              placeholderTextColor={colors.textMuted}
+              placeholderTextColor={screenColors.textMuted}
               value={code}
               onChangeText={setCode}
               keyboardType="number-pad"
@@ -352,7 +363,7 @@ export default function LoginScreen({ onLogin }: Props) {
               <TextInput
                 style={[styles.input, Platform.OS === "web" ? null : { paddingRight: 52 }]}
                 placeholder={mode === "reset" ? "New password (min 8 characters)" : "Password"}
-                placeholderTextColor={colors.textMuted}
+                placeholderTextColor={screenColors.textMuted}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPw}
@@ -379,9 +390,9 @@ export default function LoginScreen({ onLogin }: Props) {
                   <TouchableOpacity
                     key={k}
                     onPress={() => setDocType(k)}
-                    style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: colors.textMuted, marginRight: 6, marginBottom: 6, backgroundColor: docType === k ? colors.ocean : "transparent" }}
+                    style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: screenColors.textMuted, marginRight: 6, marginBottom: 6, backgroundColor: docType === k ? screenColors.ocean : "transparent" }}
                   >
-                    <Text style={{ color: docType === k ? "#fff" : colors.textMuted, fontWeight: "700" }}>{DOC_LABELS[k]}</Text>
+                    <Text style={{ color: docType === k ? "#fff" : screenColors.textMuted, fontWeight: "700" }}>{DOC_LABELS[k]}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -395,9 +406,9 @@ export default function LoginScreen({ onLogin }: Props) {
               </View>
               {docs.map((d, i) => (
                 <View key={i} style={{ flexDirection: "row", alignItems: "center", marginTop: 6 }}>
-                  <Text style={{ color: colors.text, flex: 1 }}>✅ {DOC_LABELS[d.type]} · {d.name}</Text>
+                  <Text style={{ color: screenColors.text, flex: 1 }}>✅ {DOC_LABELS[d.type]} · {d.name}</Text>
                   <TouchableOpacity onPress={() => setDocs((x) => x.filter((_, j) => j !== i))}>
-                    <Text style={{ color: colors.coral, fontWeight: "800" }}>Remove</Text>
+                    <Text style={{ color: screenColors.coral, fontWeight: "800" }}>Remove</Text>
                   </TouchableOpacity>
                 </View>
               ))}
@@ -409,10 +420,10 @@ export default function LoginScreen({ onLogin }: Props) {
               accessibilityRole="checkbox"
               style={{ flexDirection: "row", alignItems: "center", marginBottom: 10 }}
             >
-              <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: colors.textMuted, alignItems: "center", justifyContent: "center", backgroundColor: keep ? colors.green : "transparent", marginRight: 10 }}>
+              <View style={{ width: 22, height: 22, borderRadius: 6, borderWidth: 2, borderColor: screenColors.textMuted, alignItems: "center", justifyContent: "center", backgroundColor: keep ? screenColors.green : "transparent", marginRight: 10 }}>
                 {keep ? <Text style={{ color: "#fff", fontWeight: "900", fontSize: 14 }}>✓</Text> : null}
               </View>
-              <Text style={{ color: colors.textMuted }}>Keep me logged in</Text>
+              <Text style={{ color: screenColors.textMuted }}>Keep me logged in</Text>
             </TouchableOpacity>
           ) : null}
 
@@ -473,44 +484,61 @@ export default function LoginScreen({ onLogin }: Props) {
 }
 
 const styles = StyleSheet.create({
-  safe: { flexGrow: 1, padding: 24, justifyContent: "center", paddingBottom: 40 },
+  safe: {
+    flexGrow: 1,
+    padding: 24,
+    justifyContent: "center",
+    paddingBottom: 40,
+    ...(Platform.OS === "web" ? { width: "100%", maxWidth: 520, alignSelf: "center" as const } : {}),
+  },
+  backToSite: { alignSelf: "center", marginBottom: 18, padding: 8 },
+  backToSiteText: { color: screenColors.sky, fontSize: typography.small, fontWeight: "700" },
   hero: { alignItems: "center", marginBottom: 28 },
   logo: { fontSize: 56 },
-  logoWave: { color: colors.ocean, fontSize: 14, letterSpacing: 3, marginTop: -4, marginBottom: 6 },
+  webLogo: { width: 58, height: 58, borderRadius: 29, backgroundColor: screenColors.ocean, alignItems: "center", justifyContent: "center", marginBottom: 5 },
+  webLogoText: { color: "#FFF9EC", fontSize: 31, fontWeight: "900", fontStyle: "italic" },
+  logoWave: { color: screenColors.ocean, fontSize: 14, letterSpacing: 3, marginTop: -4, marginBottom: 6 },
   title: {
-    color: colors.sand,
+    color: screenColors.sand,
     fontSize: 30,
     fontWeight: "800",
     letterSpacing: 0.5,
     textShadowColor: "#0066CC",
     textShadowRadius: 12,
   },
-  tagline: { color: colors.text, fontSize: typography.subtitle, fontWeight: "600", marginTop: 6 },
-  subTagline: { color: colors.textMuted, fontSize: typography.small, marginTop: 4 },
-  card: { backgroundColor: colors.card, borderRadius: 20, padding: 18, borderWidth: 1, borderColor: colors.border },
+  tagline: { color: screenColors.text, fontSize: typography.subtitle, fontWeight: "600", marginTop: 6 },
+  subTagline: { color: screenColors.textMuted, fontSize: typography.small, marginTop: 4 },
+  card: {
+    backgroundColor: screenColors.card,
+    borderRadius: 20,
+    padding: 22,
+    borderWidth: 1,
+    borderColor: screenColors.border,
+    ...(Platform.OS === "web" ? { boxShadow: "0 14px 36px rgba(0, 0, 0, 0.28)" } : {}),
+  },
   tabs: {
     flexDirection: "row",
-    backgroundColor: colors.deep,
+    backgroundColor: screenColors.deep,
     borderRadius: 12,
     padding: 3,
     marginBottom: 16,
   },
   tab: { flex: 1, alignItems: "center", paddingVertical: 10, borderRadius: 9 },
-  tabActive: { backgroundColor: colors.ocean },
-  tabText: { color: colors.textMuted, fontWeight: "700" },
-  tabTextActive: { color: colors.text },
+  tabActive: { backgroundColor: screenColors.ocean },
+  tabText: { color: screenColors.textMuted, fontWeight: "700" },
+  tabTextActive: { color: "#FFF9EC" },
   driverBadge: {
     alignSelf: "center",
     backgroundColor: "rgba(0,102,204,0.15)",
     borderWidth: 1,
-    borderColor: colors.ocean,
+    borderColor: screenColors.ocean,
     borderRadius: 20,
     paddingHorizontal: 16,
     paddingVertical: 7,
     marginBottom: 16,
   },
-  driverBadgeText: { color: colors.sky, fontWeight: "800", fontSize: typography.tiny, letterSpacing: 2 },
-  roleLabel: { color: colors.textMuted, fontSize: typography.small, fontWeight: "600", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
+  driverBadgeText: { color: screenColors.sky, fontWeight: "800", fontSize: typography.tiny, letterSpacing: 2 },
+  roleLabel: { color: screenColors.textMuted, fontSize: typography.small, fontWeight: "600", marginBottom: 8, textTransform: "uppercase", letterSpacing: 0.4 },
   roleRow: { flexDirection: "row", gap: 10, marginBottom: 14 },
   roleChip: {
     flex: 1,
@@ -518,29 +546,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    backgroundColor: colors.deep,
+    backgroundColor: screenColors.deep,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: screenColors.border,
     borderRadius: 12,
     paddingVertical: 12,
   },
-  roleChipActive: { borderColor: colors.ocean, backgroundColor: "rgba(0,102,204,0.15)" },
+  roleChipActive: { borderColor: screenColors.ocean, backgroundColor: "rgba(0,102,204,0.15)" },
   roleIcon: { fontSize: 18 },
-  roleText: { color: colors.textMuted, fontWeight: "600" },
-  roleTextActive: { color: colors.text },
+  roleText: { color: screenColors.textMuted, fontWeight: "600" },
+  roleTextActive: { color: screenColors.text },
   input: {
-    backgroundColor: colors.deep,
+    backgroundColor: screenColors.deep,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: screenColors.border,
     borderRadius: 12,
     paddingHorizontal: 14,
     paddingVertical: 13,
-    color: colors.text,
+    color: screenColors.text,
     fontSize: typography.body,
     marginBottom: 12,
   },
   btn: {
-    backgroundColor: colors.ocean,
+    backgroundColor: screenColors.ocean,
     borderRadius: 14,
     padding: 16,
     alignItems: "center",
@@ -553,15 +581,15 @@ const styles = StyleSheet.create({
     padding: 13,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.deep,
+    borderColor: screenColors.border,
+    backgroundColor: screenColors.deep,
   },
-  demoBtnText: { color: colors.sky, fontWeight: "700", fontSize: typography.small },
+  demoBtnText: { color: screenColors.sky, fontWeight: "700", fontSize: typography.small },
   driverLink: { marginTop: 14, alignItems: "center", paddingVertical: 8 },
-  driverLinkText: { color: colors.sky, fontWeight: "700", fontSize: typography.small, textDecorationLine: "underline" },
-  error: { color: colors.coral, marginBottom: 10, fontSize: typography.small },
-  info: { color: colors.sky, marginBottom: 10, fontSize: typography.small },
-  demo: { color: colors.textMuted, fontSize: typography.tiny, marginTop: 16, textAlign: "center", lineHeight: 16 },
+  driverLinkText: { color: screenColors.sky, fontWeight: "700", fontSize: typography.small, textDecorationLine: "underline" },
+  error: { color: screenColors.coral, marginBottom: 10, fontSize: typography.small },
+  info: { color: screenColors.sky, marginBottom: 10, fontSize: typography.small },
+  demo: { color: screenColors.textMuted, fontSize: typography.tiny, marginTop: 16, textAlign: "center", lineHeight: 16 },
   swellFooter: { alignItems: "center", marginTop: 18 },
-  swellText: { color: colors.sky, fontSize: typography.small, opacity: 0.8 },
+  swellText: { color: screenColors.sky, fontSize: typography.small, opacity: 0.8 },
 });

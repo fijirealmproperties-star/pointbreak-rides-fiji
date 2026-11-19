@@ -5,9 +5,31 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Pointbreak Rides Fiji — Admin</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <link rel="stylesheet" href="styles.css?v=admin-login-2">
+  <link rel="stylesheet" href="styles.css?v=website-builder-4">
 </head>
 <body>
+  <main id="website-admin-auth-screen" class="login-screen" hidden>
+    <section class="login-card">
+      <img class="login-logo" src="pointbreak-logo.png" alt="Pointbreak Fiji Rides">
+      <h1>Pointbreak Website</h1>
+      <p class="login-subtitle">Independent website administrator sign in</p>
+      <form id="website-admin-login" onsubmit="websiteAdminLogin(event)">
+        <label class="cms-field">Website admin email<input id="website-admin-email" class="reg-input" type="email" autocomplete="username" required></label>
+        <label class="cms-field" style="margin-top:12px">Password<input id="website-admin-password" class="reg-input" type="password" autocomplete="current-password" required></label>
+        <button class="reg-btn login-submit" type="submit">Sign in to website editor</button>
+      </form>
+      <span id="website-admin-login-status" class="register-status" role="status" aria-live="polite"></span>
+      <button type="button" class="reg-btn reg-btn-ghost" onclick="closeWebsiteAdminAuth()">Back to editor preview</button>
+      <form id="website-admin-setup" hidden onsubmit="setupWebsiteAdmin(event)">
+        <h2>Create the separate website admin</h2>
+        <p class="admin-hint">This account is separate from rider, driver and app-admin accounts. The one-time setup key must be configured on the server.</p>
+        <label class="cms-field">One-time setup key<input id="website-admin-setup-key" class="reg-input" type="password" autocomplete="off" required></label>
+        <label class="cms-field">Website admin email<input id="website-admin-setup-email" class="reg-input" type="email" autocomplete="email" required></label>
+        <label class="cms-field">New password (12 characters minimum)<input id="website-admin-setup-password" class="reg-input" type="password" minlength="12" autocomplete="new-password" required></label>
+        <button class="reg-btn login-submit" type="submit">Create website admin</button>
+      </form>
+    </section>
+  </main>
   <main id="admin-login-screen" class="login-screen">
     <form id="admin-auth" class="login-card" onsubmit="adminLogin();return false">
       <img class="login-logo" src="pointbreak-logo.png" alt="Pointbreak surfer riding a car on a wave">
@@ -111,6 +133,15 @@
     <div id="assign-bar" style="display:none;background:#d1ecf1;color:#0c4a56;border:2px solid #17a2b8;border-radius:10px;padding:12px;margin-bottom:10px"></div>
     <div id="sched-alert" style="display:none;background:#fff3cd;color:#5c4400;border:2px solid #f0b400;border-radius:10px;padding:12px;margin-bottom:10px;font-weight:700"></div>
     <div id="sched-list"><p class="empty">No advance bookings yet.</p></div>
+  </section>
+
+  <section class="register-section" id="guest-bookings" data-tab="bookings">
+    <div class="section-header">
+      <h2>🌴 Guest transport requests</h2>
+      <span class="register-status" id="guest-booking-count"></span>
+    </div>
+    <p class="admin-hint">Website requests are not confirmed rides. Contact the traveler to confirm availability before arranging transport.</p>
+    <div id="guest-booking-list"><p class="empty">No guest requests yet.</p></div>
   </section>
 
   <section class="register-section" id="roadside" data-tab="bookings">
@@ -228,6 +259,248 @@
       <button id="ai-send" class="reg-btn" onclick="aiAsk()">Ask</button>
     </div>
   </section>
+  <section class="register-section website-editor" id="website-editor" data-tab="website">
+    <div id="cms-preview-banner" class="cms-preview-banner" hidden>
+      Preview mode: edit text and see it update live. Sign in to save changes, upload photos, or publish stories.
+    </div>
+    <div class="section-header">
+      <div>
+        <h2>🌺 Website editor</h2>
+        <p class="admin-hint">Edit your content and watch the live preview update. Sign in when you’re ready to save or publish.</p>
+      </div>
+      <div class="cms-account-actions">
+        <span id="website-admin-account" class="admin-hint"></span>
+        <button id="website-admin-signin" type="button" class="reg-btn reg-btn-ghost" onclick="openWebsiteAdminAuth()">Sign in to edit</button>
+        <button id="website-admin-password-change" type="button" class="reg-btn reg-btn-ghost" onclick="changeWebsiteAdminPassword()">Change password</button>
+        <button id="website-admin-signout" type="button" class="reg-btn reg-btn-ghost" onclick="websiteAdminLogout()">Sign out</button>
+        <a class="reg-btn reg-btn-ghost" href="/" target="_blank" rel="noopener">View public website ↗</a>
+      </div>
+    </div>
+    <nav class="cms-section-picker" aria-label="Website sections">
+      <span>Pick an area</span>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-home-section')">Home</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-features-section')">Features</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-rides-section')">Ride options</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-booking-section')">Booking</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-news-section')">News</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-about-section')">About &amp; contact</button>
+      <button type="button" class="cms-nav-btn" onclick="jumpCmsSection('cms-design-section')">Design</button>
+    </nav>
+    <div class="cms-builder-layout">
+      <div class="cms-controls-panel">
+      <div class="cms-layout">
+      <form id="website-content-form" class="cms-card" onsubmit="saveWebsiteContent(event)">
+        <div class="cms-section-heading" id="cms-home-section">
+          <div><h3>Website content</h3><span class="admin-hint">Update text shown on the homepage.</span></div>
+          <span id="website-content-status" class="register-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="cms-fields">
+          <label class="cms-field">Hero eyebrow<input id="cms-hero-eyebrow" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Hero headline<input id="cms-hero-title" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Hero highlighted line<input id="cms-hero-emphasis" class="reg-input" maxlength="140" required></label>
+          <label class="cms-field cms-field-wide">Hero description<textarea id="cms-hero-body" class="reg-input" rows="3" maxlength="500" required></textarea></label>
+          <label class="cms-field">Hero booking button<input id="cms-hero-book-label" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field">Hero about button<input id="cms-hero-about-label" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field">Hero tagline<input id="cms-hero-note" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Hero card label<input id="cms-hero-card-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Hero card heading<input id="cms-hero-card-title" class="reg-input" maxlength="80" required></label>
+          <label class="cms-field">Pickup label<input id="cms-hero-pickup-label" class="reg-input" maxlength="80" required></label>
+          <label class="cms-field">Destination label<input id="cms-hero-destination-label" class="reg-input" maxlength="80" required></label>
+          <label class="cms-field">Hero card button<input id="cms-hero-card-button" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field cms-field-wide">Hero card footnote<input id="cms-hero-card-foot" class="reg-input" maxlength="140" required></label>
+          <label class="cms-field">Intro label<input id="cms-intro-label" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Intro text<textarea id="cms-intro-text" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+        </div>
+        <div class="cms-subheading" id="cms-features-section"><h4>Features</h4><span class="admin-hint">Section heading and three cards.</span></div>
+        <div class="cms-fields">
+          <label class="cms-field">Features label<input id="cms-features-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Features heading<input id="cms-features-title" class="reg-input" maxlength="160" required></label>
+          <label class="cms-field cms-field-wide">Features introduction<textarea id="cms-features-lead" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Feature 1 title<input id="cms-feature-title-0" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Feature 1 description<textarea id="cms-feature-body-0" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Feature 2 title<input id="cms-feature-title-1" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Feature 2 description<textarea id="cms-feature-body-1" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Feature 3 title<input id="cms-feature-title-2" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Feature 3 description<textarea id="cms-feature-body-2" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+        </div>
+        <div class="cms-subheading" id="cms-rides-section"><h4>Ride options</h4><span class="admin-hint">Edit both cards and driver banner copy. Booking and login actions stay connected to the app.</span></div>
+        <div class="cms-fields">
+          <label class="cms-field">Ride options label<input id="cms-rides-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Ride options heading<input id="cms-rides-title" class="reg-input" maxlength="160" required></label>
+          <label class="cms-field cms-field-wide">Ride options introduction<textarea id="cms-rides-lead" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Ride option 1 title<input id="cms-ride-title-0" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Button label<input id="cms-ride-label-0" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field cms-field-wide">Ride option 1 description<textarea id="cms-ride-body-0" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Ride option 2 title<input id="cms-ride-title-1" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Button label<input id="cms-ride-label-1" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field cms-field-wide">Ride option 2 description<textarea id="cms-ride-body-1" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Driver banner label<input id="cms-driver-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Driver banner heading<input id="cms-driver-title" class="reg-input" maxlength="140" required></label>
+          <label class="cms-field">Driver button label<input id="cms-driver-link" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field cms-field-wide">Driver banner description<textarea id="cms-driver-body" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+        </div>
+        <div class="cms-subheading" id="cms-booking-section"><h4>Guest booking form</h4><span class="admin-hint">Keep important booking terms clear for travelers.</span></div>
+        <div class="cms-fields">
+          <label class="cms-field">Booking section label<input id="cms-booking-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Booking heading<input id="cms-booking-title" class="reg-input" maxlength="140" required></label>
+          <label class="cms-field cms-field-wide">Booking explanation<textarea id="cms-booking-lead" class="reg-input" rows="3" maxlength="800" required></textarea></label>
+          <label class="cms-field cms-field-wide">Booking notice<textarea id="cms-booking-note" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Form heading<input id="cms-booking-form-title" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Location hint<input id="cms-booking-location-hint" class="reg-input" maxlength="200" required></label>
+          <label class="cms-field">Submit button label<input id="cms-booking-submit" class="reg-input" maxlength="40" required></label>
+        </div>
+        <div class="cms-subheading" id="cms-news-section"><h4>News section</h4><span class="admin-hint">Shown when at least one story is published.</span></div>
+        <div class="cms-fields">
+          <label class="cms-field">News label<input id="cms-news-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">News heading<input id="cms-news-title" class="reg-input" maxlength="160" required></label>
+        </div>
+        <div class="cms-subheading" id="cms-about-section"><h4>About and contact</h4></div>
+        <div class="cms-fields">
+          <label class="cms-field">About section label<input id="cms-about-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">About link label<input id="cms-about-link" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field cms-field-wide">About heading<input id="cms-about-title" class="reg-input" maxlength="160" required></label>
+          <label class="cms-field cms-field-wide">About paragraph 1<textarea id="cms-about-body" class="reg-input" rows="3" maxlength="1000" required></textarea></label>
+          <label class="cms-field cms-field-wide">About paragraph 2<textarea id="cms-about-second" class="reg-input" rows="2" maxlength="1000" required></textarea></label>
+        </div>
+        <div class="cms-subheading"><h4>About photo</h4><span class="admin-hint">This replaces the illustrated Fiji card above.</span></div>
+        <div class="cms-photo-row">
+          <img id="cms-about-preview" class="cms-photo-preview" alt="About section photo preview" hidden>
+          <div>
+            <input id="cms-about-file" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadWebsitePhoto(event,'about')">
+            <button id="cms-about-upload-button" type="button" class="reg-btn reg-btn-ghost" onclick="document.getElementById('cms-about-file').click()">Upload About photo</button>
+            <button type="button" id="cms-clear-about-photo" class="reg-btn reg-btn-ghost" onclick="clearWebsiteAboutPhoto()" hidden>Use Fiji artwork</button>
+            <p class="admin-hint" id="cms-about-photo-name">The decorative Fiji artwork is shown when no photo is selected.</p>
+          </div>
+        </div>
+        <div class="cms-fields">
+          <label class="cms-field cms-field-wide">Photo description for accessibility<input id="cms-about-image-alt" class="reg-input" maxlength="200" placeholder="Optional description"></label>
+        </div>
+        <div class="cms-fields">
+          <label class="cms-field">Contact heading<input id="cms-contact-title" class="reg-input" maxlength="120" required></label>
+          <label class="cms-field">Contact section label<input id="cms-contact-kicker" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Contact email<input id="cms-contact-email" class="reg-input" type="email" maxlength="254" required></label>
+          <label class="cms-field">Contact phone (optional)<input id="cms-contact-phone" class="reg-input" type="tel" maxlength="30" placeholder="+679 ..." autocomplete="tel"></label>
+          <label class="cms-field">Email label<input id="cms-contact-email-label" class="reg-input" maxlength="80" required></label>
+          <label class="cms-field cms-field-wide">Contact description<textarea id="cms-contact-lead" class="reg-input" rows="2" maxlength="500" required></textarea></label>
+          <label class="cms-field">Contact reassurance<input id="cms-contact-foot" class="reg-input" maxlength="200" required></label>
+          <label class="cms-field">Contact form heading<input id="cms-contact-form-title" class="reg-input" maxlength="100" required></label>
+          <label class="cms-field">Contact form hint<input id="cms-contact-form-hint" class="reg-input" maxlength="200" required></label>
+          <label class="cms-field">Contact form button<input id="cms-contact-form-button" class="reg-input" maxlength="40" required></label>
+          <label class="cms-field">Footer tagline<input id="cms-footer-tagline" class="reg-input" maxlength="100" required></label>
+        </div>
+        <div class="cms-subheading" id="cms-photo-section"><h4>Homepage photo</h4><span class="admin-hint">JPG, PNG or WebP · maximum 3 MB</span></div>
+        <div class="cms-photo-row">
+          <img id="cms-hero-preview" class="cms-photo-preview" alt="Homepage hero preview" hidden>
+          <div>
+            <input id="cms-hero-file" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadWebsitePhoto(event,'hero')">
+            <button id="cms-hero-upload-button" type="button" class="reg-btn reg-btn-ghost" onclick="document.getElementById('cms-hero-file').click()">Upload homepage photo</button>
+            <button type="button" id="cms-clear-hero" class="reg-btn reg-btn-ghost" onclick="clearWebsiteHero()" hidden>Use original artwork</button>
+            <p class="admin-hint" id="cms-hero-name"></p>
+          </div>
+        </div>
+        <div class="cms-subheading" id="cms-design-section"><h4>Design and layout</h4><span class="admin-hint">Try a Fiji-inspired preset or customize the colors and shape.</span></div>
+        <div class="cms-fields cms-design-fields">
+          <label class="cms-field">Design suggestion
+            <select id="cms-theme-preset" class="reg-input">
+              <option value="custom">Custom design</option>
+              <option value="lagoon">Lagoon</option>
+              <option value="coral">Coral sunset</option>
+              <option value="earth">Island earth</option>
+            </select>
+          </label>
+          <label class="cms-field">Page background<input id="cms-theme-background" class="reg-input cms-color-input" type="color"></label>
+          <label class="cms-field">Card / surface color<input id="cms-theme-surface" class="reg-input cms-color-input" type="color"></label>
+          <label class="cms-field">Accent color<input id="cms-theme-accent" class="reg-input cms-color-input" type="color"></label>
+          <label class="cms-field">Text color<input id="cms-theme-text" class="reg-input cms-color-input" type="color"></label>
+          <label class="cms-field">Border color<input id="cms-theme-border" class="reg-input cms-color-input" type="color"></label>
+          <label class="cms-field">Corner roundness
+            <input id="cms-theme-radius" class="reg-input" type="number" min="0" max="32" step="1">
+          </label>
+        </div>
+        <div class="cms-photo-row">
+          <img id="cms-background-preview" class="cms-photo-preview" alt="Website background photo preview" hidden>
+          <div>
+            <input id="cms-background-file" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadWebsitePhoto(event,'background')">
+            <button id="cms-background-upload-button" type="button" class="reg-btn reg-btn-ghost" onclick="document.getElementById('cms-background-file').click()">Upload background photo</button>
+            <button type="button" id="cms-clear-background" class="reg-btn reg-btn-ghost" onclick="clearWebsiteBackground()" hidden>Remove background photo</button>
+            <p class="admin-hint" id="cms-background-name">Optional; shown softly behind the page content.</p>
+          </div>
+        </div>
+        <div class="cms-subheading"><h4>Rearrange sections</h4><span class="admin-hint">Use the arrows to change the order on the live page.</span></div>
+        <ol id="cms-section-order" class="cms-section-order" aria-label="Website section order"></ol>
+        <div class="cms-subheading"><h4>Custom links</h4><span class="admin-hint">Optional links in the main navigation; up to 8.</span></div>
+        <div id="cms-custom-links" class="cms-custom-links"></div>
+        <div class="cms-actions">
+          <button type="submit" class="reg-btn">Save website changes</button>
+          <button type="button" class="reg-btn reg-btn-ghost" onclick="loadWebsiteEditor()">Discard unsaved changes</button>
+        </div>
+      </form>
+
+      <div class="cms-side">
+        <form id="website-post-form" class="cms-card" onsubmit="saveWebsitePost(event)">
+          <div class="cms-section-heading">
+            <div><h3 id="cms-post-form-title">Create news or a photo post</h3><span class="admin-hint">Drafts stay private. Published stories appear on the public homepage.</span></div>
+          </div>
+          <input id="cms-post-id" type="hidden">
+          <label class="cms-field">Title<input id="cms-post-title" class="reg-input" maxlength="140" required></label>
+          <label class="cms-field">Short introduction<textarea id="cms-post-summary" class="reg-input" rows="2" maxlength="300" required></textarea></label>
+          <label class="cms-field">Story<textarea id="cms-post-body" class="reg-input" rows="7" maxlength="6000" required></textarea></label>
+          <div class="cms-photo-row">
+            <img id="cms-post-preview" class="cms-photo-preview" alt="News photo preview" hidden>
+            <div>
+              <input id="cms-post-file" type="file" accept="image/jpeg,image/png,image/webp" hidden onchange="uploadWebsitePhoto(event,'post')">
+              <button id="cms-post-upload-button" type="button" class="reg-btn reg-btn-ghost" onclick="document.getElementById('cms-post-file').click()">Add photo</button>
+              <button type="button" id="cms-remove-post-photo" class="reg-btn reg-btn-ghost" onclick="clearWebsitePostPhoto()" hidden>Remove photo</button>
+              <p class="admin-hint" id="cms-post-photo-name"></p>
+            </div>
+          </div>
+          <label class="cms-field">Photo description for accessibility<input id="cms-post-image-alt" class="reg-input" maxlength="200"></label>
+          <label class="cms-publish-toggle"><input id="cms-post-published" type="checkbox"> Publish this story on the public website</label>
+          <div class="cms-actions">
+            <button id="cms-post-save" type="submit" class="reg-btn">Save story</button>
+            <button type="button" class="reg-btn reg-btn-ghost" onclick="resetWebsitePostForm()">New story</button>
+          </div>
+          <span id="website-post-status" class="register-status" role="status" aria-live="polite"></span>
+        </form>
+        <section class="cms-card">
+          <div class="cms-section-heading">
+            <div><h3>News and photo posts</h3><span id="cms-post-count" class="admin-hint"></span></div>
+            <button type="button" class="reg-btn reg-btn-ghost" onclick="loadWebsiteEditor()">Refresh</button>
+          </div>
+          <div id="cms-post-list" class="cms-post-list"><p class="empty">Loading website content…</p></div>
+        </section>
+        <section class="cms-card">
+          <div class="cms-section-heading"><div><h3>Photo library</h3><span class="admin-hint">Photos are stored privately until used in published content.</span></div></div>
+          <div id="cms-media-list" class="cms-media-list"><p class="empty">No photos uploaded.</p></div>
+        </section>
+      </div>
+    </div>
+    </div>
+    <section class="cms-live-preview" aria-label="Live website preview">
+      <div class="cms-preview-toolbar">
+        <div>
+          <strong>Live preview</strong>
+          <span class="admin-hint">Changes appear as you type</span>
+        </div>
+        <div class="cms-preview-actions">
+          <div class="cms-preview-size-controls" role="group" aria-label="Preview size">
+            <button type="button" class="cms-preview-size-btn active" data-size="desktop" onclick="setWebsitePreviewSize('desktop')" aria-pressed="true">Desktop</button>
+            <button type="button" class="cms-preview-size-btn" data-size="mobile" onclick="setWebsitePreviewSize('mobile')" aria-pressed="false">Mobile</button>
+          </div>
+          <button type="button" class="cms-preview-size-btn cms-preview-reload" onclick="refreshWebsitePreview()" aria-label="Reload preview" title="Reload preview">↻</button>
+        </div>
+      </div>
+      <div id="cms-live-preview-window" class="cms-live-preview-window">
+        <iframe
+          id="cms-live-preview-frame"
+          title="Live preview of the public Pointbreak website"
+          src="/?websiteBuilderPreview=1"
+          loading="eager"
+        ></iframe>
+      </div>
+    </section>
+    </div>
+  </section>
   <section class="map-section" data-tab="live">
     <div class="section-header">
       <h2>Live Map</h2>
@@ -262,6 +535,6 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="app.js?v=accounts-split-1"></script>
+  <script src="app.js?v=website-builder-4"></script>
 </body>
 </html>
