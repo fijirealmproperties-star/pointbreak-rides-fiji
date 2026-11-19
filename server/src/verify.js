@@ -82,4 +82,4 @@ async function checkCode(db, userId, purpose, code, consume) {
   return true;
 }
 
-module.exports = { initVerify, normEmail, validEmail, mailConfigured, issueCode, checkCode };
+module.exports = { initVerify, normEmail, validEmail, mailConfigured, sendMail, issueCode, checkCode };

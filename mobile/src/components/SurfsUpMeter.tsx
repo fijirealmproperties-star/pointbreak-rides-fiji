@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Alert, Platform, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import * as Location from "expo-location";
 import { api } from "../api";
 import { startMeterGps } from "../meterGps";
@@ -45,6 +45,11 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [lastTotal, setLastTotal] = useState<number | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [receiptEmail, setReceiptEmail] = useState("");
+  const [receiptStatus, setReceiptStatus] = useState("");
+  const [receiptTripId, setReceiptTripId] = useState<number | null>(null);
+  const [sendingReceipt, setSendingReceipt] = useState(false);
+  const [receiptSent, setReceiptSent] = useState(false);
 
   const sub = useRef<(() => void) | null>(null);
   const timer = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -195,6 +200,10 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     last.current = null;
     tripId.current = null;
     setLastTotal(null);
+    setReceiptEmail("");
+    setReceiptStatus("");
+    setReceiptTripId(null);
+    setReceiptSent(false);
     setNote("You are now offline. Switch Online on the Home tab when the trip is done.");
     startedAt.current = Date.now();
     startReq.current = api("/drivers/roadside/start", { method: "POST", body: { tariff_type: tariffRef.current } })
@@ -244,9 +253,48 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     };
     setLastTotal(total);
     setNote(null);
+    setReceiptStatus("Saving trip before the receipt can be sent…");
+    setReceiptTripId(null);
     startReq.current.then(async (id) => {
-      try { await api("/drivers/roadside", { method: "POST", body: { ...body, trip_id: body.trip_id ?? id } }); } catch {}
+      try {
+        const saved = await api<{ trip_id?: number }>("/drivers/roadside", {
+          method: "POST",
+          body: { ...body, trip_id: body.trip_id ?? id },
+        });
+        const savedId = body.trip_id ?? id ?? saved.trip_id;
+        if (typeof savedId === "number") {
+          setReceiptTripId(savedId);
+          setReceiptStatus("");
+        } else {
+          setReceiptStatus("Trip saved, but its receipt is unavailable. Please contact support.");
+        }
+      } catch {
+        setReceiptStatus("Could not save this trip to the server, so a receipt cannot be sent yet.");
+      }
     });
+  }
+
+  async function sendReceipt() {
+    if (!receiptTripId || sendingReceipt || receiptSent) return;
+    const email = receiptEmail.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email) || email.length > 120) {
+      setReceiptStatus("Enter the passenger's valid email address.");
+      return;
+    }
+    setSendingReceipt(true);
+    setReceiptStatus("");
+    try {
+      await api(`/drivers/roadside-trips/${receiptTripId}/receipt`, {
+        method: "POST",
+        body: { email },
+      });
+      setReceiptSent(true);
+      setReceiptStatus(`Receipt sent to ${email}.`);
+    } catch (error) {
+      setReceiptStatus(error instanceof Error ? error.message : "Could not send the receipt. Please try again.");
+    } finally {
+      setSendingReceipt(false);
+    }
   }
 
   function reset() {
@@ -259,6 +307,10 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
     speedRef.current = 0;
     accRef.current = null;
     setLastTotal(null);
+    setReceiptEmail("");
+    setReceiptStatus("");
+    setReceiptTripId(null);
+    setReceiptSent(false);
     setNote(null);
     paint();
   }
@@ -296,6 +348,25 @@ export default function SurfsUpMeter({ driverId }: { driverId?: string }) {
         <View style={styles.totalCard}>
           <Text style={styles.label}>Total fare for the trip just ended</Text>
           <Text style={styles.totalVal}>FJ$ {lastTotal.toFixed(2)}</Text>
+          <TextInput
+            style={styles.receiptInput}
+            placeholder="Passenger email for receipt"
+            placeholderTextColor="#aaa"
+            value={receiptEmail}
+            onChangeText={setReceiptEmail}
+            accessibilityLabel="Passenger email for receipt"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoComplete="email"
+          />
+          <TouchableOpacity
+            style={[styles.btn, styles.receipt, (!receiptTripId || sendingReceipt || receiptSent) && styles.off]}
+            disabled={!receiptTripId || sendingReceipt || receiptSent}
+            onPress={sendReceipt}
+          >
+            <Text style={styles.btnText}>{sendingReceipt ? "SENDING RECEIPT…" : receiptSent ? "RECEIPT SENT" : "EMAIL RECEIPT"}</Text>
+          </TouchableOpacity>
+          {receiptStatus ? <Text accessibilityLiveRegion="polite" style={styles.receiptStatus}>{receiptStatus}</Text> : null}
         </View>
       ) : null}
       {note ? <Text style={styles.saved}>{note}</Text> : null}
@@ -335,6 +406,9 @@ const styles = StyleSheet.create({
   btnText: { fontSize: 17, fontWeight: "bold", color: "#000" },
   totalCard: { backgroundColor: "#0f3d2a", padding: 16, borderRadius: 12, alignItems: "center", marginTop: 14 },
   totalVal: { fontSize: 30, fontWeight: "bold", color: "#22CC66", marginTop: 4 },
+  receiptInput: { alignSelf: "stretch", backgroundColor: "#2a2a2a", borderRadius: 8, color: "#fff", paddingHorizontal: 12, paddingVertical: 11, marginTop: 14 },
+  receipt: { backgroundColor: "#03dac6", alignSelf: "stretch" },
+  receiptStatus: { color: "#cfd8dc", textAlign: "center", marginTop: 10, fontSize: 12 },
   saved: { color: colors.green, textAlign: "center", marginTop: 12, fontSize: typography.small },
   status: { color: "#777", textAlign: "center", marginTop: 12, fontSize: 11 },
 });

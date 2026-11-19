@@ -74,10 +74,19 @@ const db = new SQLiteWrapper(DB_PATH);
   app.use('/api/riders', require('./src/routes/riders'));
   app.use('/api/push', require('./src/routes/push')(db));
   app.use('/api/notices', require('./src/routes/notices')(db));
+  app.use('/api/guest-bookings', require('./src/routes/guest-bookings')(db));
+  app.use('/api/website', require('./src/routes/website')(db));
+  app.use('/api/website-auth', require('./src/routes/website-auth')(db));
+  app.use('/api/admin/website', require('./src/routes/admin-website')(db));
   app.use('/api/admin', require('./src/routes/admin')(db, matchingEngine));
 
   // Admin dashboard (static, talks to the API on the same origin).
   app.use('/admin', express.static(ADMIN_DIR));
+  app.get('/website-admin', (req, res, next) => {
+    if (req.path === '/website-admin') return res.redirect(301, '/website-admin/');
+    next();
+  });
+  app.use('/website-admin', express.static(ADMIN_DIR, { setHeaders: (res) => res.set('Cache-Control', 'no-store') }));
 
   // Rider/driver web build: / serves the app; native apps use the API directly.
   if (fs.existsSync(path.join(MOBILE_WEB_DIR, 'index.html'))) {
