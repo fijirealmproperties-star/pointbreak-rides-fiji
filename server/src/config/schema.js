@@ -85,6 +85,57 @@ CREATE TABLE IF NOT EXISTS rides (
   cancelled_at TEXT,
   rating INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS guest_bookings (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL,
+  phone TEXT NOT NULL,
+  pickup TEXT NOT NULL,
+  dropoff TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  passengers INTEGER NOT NULL,
+  notes TEXT,
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS website_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS website_admins (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS website_media (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  mime TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS website_posts (
+  id TEXT PRIMARY KEY,
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  body TEXT NOT NULL,
+  image_id TEXT,
+  image_alt TEXT NOT NULL DEFAULT '',
+  published INTEGER NOT NULL DEFAULT 0,
+  published_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  FOREIGN KEY (image_id) REFERENCES website_media(id)
+);
 `);
 
   // --- Taxi meter + rider verification (added after the initial schema) ---
@@ -110,6 +161,9 @@ CREATE TABLE IF NOT EXISTS rides (
   ensureColumn(db, 'users', 'suspended_at', 'TEXT');
   ensureColumn(db, 'roadside_trips', 'status', "TEXT DEFAULT 'finished'");
   ensureColumn(db, 'roadside_trips', 'ended_at', 'TEXT');
+  ensureColumn(db, 'roadside_trips', 'receipt_email', 'TEXT');
+  ensureColumn(db, 'roadside_trips', 'receipt_status', "TEXT NOT NULL DEFAULT 'not_sent'");
+  ensureColumn(db, 'roadside_trips', 'receipt_sent_at', 'TEXT');
   db.exec(`
 CREATE TABLE IF NOT EXISTS user_documents (
   id TEXT PRIMARY KEY,
