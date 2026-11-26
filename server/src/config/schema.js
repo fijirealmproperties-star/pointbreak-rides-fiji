@@ -109,7 +109,8 @@ CREATE TABLE IF NOT EXISTS website_settings (
 
 CREATE TABLE IF NOT EXISTS website_admins (
   id TEXT PRIMARY KEY,
-  email TEXT NOT NULL UNIQUE,
+  username TEXT NOT NULL UNIQUE,
+  email TEXT UNIQUE,
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -137,6 +138,32 @@ CREATE TABLE IF NOT EXISTS website_posts (
   FOREIGN KEY (image_id) REFERENCES website_media(id)
 );
 `);
+
+  if (!hasColumn(db, 'website_admins', 'username')) {
+    db.exec('BEGIN');
+    try {
+      db.exec('ALTER TABLE website_admins RENAME TO website_admins_legacy');
+      db.exec(`
+CREATE TABLE website_admins (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL UNIQUE,
+  email TEXT UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+`);
+      db.prepare(`
+        INSERT INTO website_admins (id, username, email, password_hash, created_at)
+        SELECT id, LOWER(email), email, password_hash, created_at
+        FROM website_admins_legacy
+      `).run();
+      db.exec('DROP TABLE website_admins_legacy');
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  }
 
   // --- Taxi meter + rider verification (added after the initial schema) ---
   ensureColumn(db, 'rides', 'pickup_code', 'TEXT');
