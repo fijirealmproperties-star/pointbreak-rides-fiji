@@ -140,10 +140,9 @@ CREATE TABLE IF NOT EXISTS website_posts (
 `);
 
   if (!hasColumn(db, 'website_admins', 'username')) {
-    db.exec('BEGIN');
-    try {
-      db.exec('ALTER TABLE website_admins RENAME TO website_admins_legacy');
-      db.exec(`
+  db.exec(`
+BEGIN TRANSACTION;
+ALTER TABLE website_admins RENAME TO website_admins_legacy;
 CREATE TABLE website_admins (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -151,18 +150,12 @@ CREATE TABLE website_admins (
   password_hash TEXT NOT NULL,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+INSERT INTO website_admins (id, username, email, password_hash, created_at)
+SELECT id, LOWER(email), email, password_hash, created_at
+FROM website_admins_legacy;
+DROP TABLE website_admins_legacy;
+COMMIT;
 `);
-      db.prepare(`
-        INSERT INTO website_admins (id, username, email, password_hash, created_at)
-        SELECT id, LOWER(email), email, password_hash, created_at
-        FROM website_admins_legacy
-      `).run();
-      db.exec('DROP TABLE website_admins_legacy');
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
   }
 
   // --- Taxi meter + rider verification (added after the initial schema) ---
