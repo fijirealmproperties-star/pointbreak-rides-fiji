@@ -35,8 +35,9 @@ const cmsPreviewUrls = new Map();
 const websiteAdminMode = window.location.pathname.startsWith('/website-admin');
 let websiteAdminToken = localStorage.getItem('pb_website_admin_token') || null;
 let websiteAdminRefresh = localStorage.getItem('pb_website_admin_refresh') || null;
-let websiteAdminEmail = localStorage.getItem('pb_website_admin_email') || null;
-let websiteAdminPreviewMode = !(websiteAdminToken && websiteAdminEmail);
+let websiteAdminUsername = localStorage.getItem('pb_website_admin_username') ||
+  localStorage.getItem('pb_website_admin_email') || null;
+let websiteAdminPreviewMode = !(websiteAdminToken && websiteAdminUsername);
 let websiteAdminAuthVisible = false;
 // "Keep me logged in" unticked: the admin sign-in only lasts for this browser session.
 if (localStorage.getItem('pb_admin_keep') === '0' && !sessionStorage.getItem('pb_admin_sess')) {
@@ -99,12 +100,14 @@ async function init() {
     document.title = 'Pointbreak Website Admin';
     document.querySelector('.header-subtitle').textContent = 'Website Editor';
     initializeWebsiteBuilder();
+    websiteAdminAuthVisible = !(websiteAdminToken && websiteAdminUsername);
     renderWebsiteAdminState();
-    if (websiteAdminToken && websiteAdminEmail) {
+    if (websiteAdminToken && websiteAdminUsername) {
       showTab('website');
       loadWebsiteEditor();
     } else {
       loadWebsiteEditorPreview();
+      loadWebsiteAdminStatus();
     }
     return;
   }
@@ -161,12 +164,12 @@ async function refreshWebsiteAdminToken() {
 }
 
 function renderWebsiteAdminState() {
-  const signedIn = !!(websiteAdminToken && websiteAdminEmail);
+  const signedIn = !!(websiteAdminToken && websiteAdminUsername);
   websiteAdminPreviewMode = !signedIn;
   document.getElementById('admin-login-screen').hidden = true;
   document.getElementById('website-admin-auth-screen').hidden = signedIn || !websiteAdminAuthVisible;
   document.getElementById('admin-dashboard').hidden = !signedIn && websiteAdminAuthVisible;
-  document.getElementById('website-admin-account').textContent = signedIn ? websiteAdminEmail : 'Preview mode · not saved';
+  document.getElementById('website-admin-account').textContent = signedIn ? websiteAdminUsername : 'Preview mode · not saved';
   document.getElementById('cms-preview-banner').hidden = signedIn;
   document.getElementById('website-admin-signin').hidden = signedIn;
   document.getElementById('website-admin-password-change').hidden = !signedIn;
@@ -338,10 +341,11 @@ async function loadWebsiteAdminStatus() {
 function saveWebsiteAdminSession(data) {
   websiteAdminToken = data.accessToken;
   websiteAdminRefresh = data.refreshToken;
-  websiteAdminEmail = data.user.email;
+  websiteAdminUsername = data.user.username || data.user.email;
   localStorage.setItem('pb_website_admin_token', websiteAdminToken);
   localStorage.setItem('pb_website_admin_refresh', websiteAdminRefresh);
-  localStorage.setItem('pb_website_admin_email', websiteAdminEmail);
+  localStorage.setItem('pb_website_admin_username', websiteAdminUsername);
+  localStorage.removeItem('pb_website_admin_email');
   websiteAdminAuthVisible = false;
   renderWebsiteAdminState();
   showTab('website');
@@ -351,13 +355,13 @@ function saveWebsiteAdminSession(data) {
 async function websiteAdminLogin(event) {
   event.preventDefault();
   const status = document.getElementById('website-admin-login-status');
-  const email = document.getElementById('website-admin-email').value.trim();
+  const username = document.getElementById('website-admin-username').value.trim();
   const password = document.getElementById('website-admin-password').value;
   try {
     const response = await nativeFetch(`${API_URL}/api/website-auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Website admin sign-in failed');
@@ -373,13 +377,13 @@ async function setupWebsiteAdmin(event) {
   event.preventDefault();
   const status = document.getElementById('website-admin-login-status');
   const setupKey = document.getElementById('website-admin-setup-key').value;
-  const email = document.getElementById('website-admin-setup-email').value.trim();
+  const username = document.getElementById('website-admin-setup-username').value.trim();
   const password = document.getElementById('website-admin-setup-password').value;
   try {
     const response = await nativeFetch(`${API_URL}/api/website-auth/setup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setupKey, email, password }),
+      body: JSON.stringify({ setupKey, username, password }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Could not create the website admin');
@@ -395,9 +399,10 @@ async function setupWebsiteAdmin(event) {
 function websiteAdminLogout() {
   websiteAdminToken = null;
   websiteAdminRefresh = null;
-  websiteAdminEmail = null;
+  websiteAdminUsername = null;
   localStorage.removeItem('pb_website_admin_token');
   localStorage.removeItem('pb_website_admin_refresh');
+  localStorage.removeItem('pb_website_admin_username');
   localStorage.removeItem('pb_website_admin_email');
   websiteAdminAuthVisible = false;
   cmsPreviewUrls.forEach((url) => URL.revokeObjectURL(url));

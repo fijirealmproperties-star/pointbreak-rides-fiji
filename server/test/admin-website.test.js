@@ -39,8 +39,8 @@ async function createApp(t, { seedWebsiteAdmin = true } = {}) {
   };
   initSchema(db);
   if (seedWebsiteAdmin) {
-    db.prepare('INSERT INTO website_admins (id, email, password_hash) VALUES (?, ?, ?)')
-      .run('website-admin-id', 'owner@example.com', await bcrypt.hash('a separate website password', 4));
+    db.prepare('INSERT INTO website_admins (id, username, email, password_hash) VALUES (?, ?, ?, ?)')
+      .run('website-admin-id', 'owner', 'owner@example.com', await bcrypt.hash('a separate website password', 4));
   }
   const app = express();
   app.use(express.json({ limit: '10mb' }));
@@ -276,35 +276,40 @@ test('first website admin setup is one-time and creates separate account tokens'
   assert.equal(status.body.setupRequired, true);
   assert.equal(status.body.setupConfigured, true);
   assert.equal((await request(base, '/website-auth/setup', {
-    method: 'POST', body: { setupKey: 'wrong', email: 'owner@example.com', password: 'a secure website password' },
+    method: 'POST', body: { setupKey: 'wrong', username: 'pointbreakweb', password: 'a secure website password' },
   })).status, 403);
   assert.equal((await request(base, '/website-auth/setup', {
-    method: 'POST', body: { setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY, email: 'owner@example.com', password: 'short' },
+    method: 'POST', body: { setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY, username: 'pointbreakweb', password: 'short' },
+  })).status, 400);
+  assert.equal((await request(base, '/website-auth/setup', {
+    method: 'POST',
+    body: { setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY, username: 'x', password: 'a secure website password' },
   })).status, 400);
   const created = await request(base, '/website-auth/setup', {
     method: 'POST',
     body: {
       setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY,
-      email: ' Owner@Example.com ',
+      username: ' PointBreakWeb ',
       password: 'a secure website password',
     },
   });
   assert.equal(created.status, 201);
-  assert.equal(created.body.user.email, 'owner@example.com');
+  assert.equal(created.body.user.username, 'pointbreakweb');
+  assert.equal(created.body.user.email, null);
   assert.equal(created.body.user.role, 'website_admin');
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
   assert.equal((await request(base, '/website-auth/setup', {
     method: 'POST',
     body: {
       setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY,
-      email: 'other@example.com',
+      username: 'otheradmin',
       password: 'another secure password',
     },
   })).status, 409);
 
   assert.equal((await request(base, '/admin/website', { token: admin })).status, 401);
   const login = await request(base, '/website-auth/login', {
-    method: 'POST', body: { email: 'owner@example.com', password: 'a secure website password' },
+    method: 'POST', body: { username: 'POINTBREAKWEB', password: 'a secure website password' },
   });
   assert.equal(login.status, 200);
   assert.equal((await request(base, '/admin/website', { token: login.body.accessToken })).status, 200);
@@ -312,4 +317,68 @@ test('first website admin setup is one-time and creates separate account tokens'
     method: 'POST', body: { refreshToken: login.body.refreshToken },
   });
   assert.equal(refresh.status, 200);
+});
+
+test('existing website-admin email logins remain compatible after username migration', async (t) => {
+  const { base } = await createApp(t);
+  const login = await request(base, '/website-auth/login', {
+    method: 'POST',
+    body: { username: 'OWNER@EXAMPLE.COM', password: 'a separate website password' },
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.body.user.username, 'owner');
+});
+
+test('legacy website-admin tables migrate email addresses into usernames', async (t) => {
+  const SQL = await initSqlJs();
+  const raw = new SQL.Database();
+  raw.exec(`
+    CREATE TABLE website_admins (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
+  raw.run(
+    'INSERT INTO website_admins (id, email, password_hash) VALUES (?, ?, ?)',
+    ['legacy-admin', 'owner@example.com', 'legacy-hash']
+  );
+  const db = {
+    exec: (sql) => raw.exec(sql),
+    prepare(sql) {
+      return {
+        run: (...args) => {
+          raw.run(sql, args);
+          return { changes: raw.getRowsModified() };
+        },
+        all(...args) {
+          const stmt = raw.prepare(sql);
+          try {
+            stmt.bind(args);
+            const rows = [];
+            while (stmt.step()) rows.push(stmt.getAsObject());
+            return rows;
+          } finally { stmt.free(); }
+        },
+        get(...args) {
+          const stmt = raw.prepare(sql);
+          try {
+            stmt.bind(args);
+            return stmt.step() ? stmt.getAsObject() : undefined;
+          } finally { stmt.free(); }
+        },
+      };
+    },
+  };
+  t.after(() => raw.close());
+  initSchema(db);
+  const migrated = db.prepare('SELECT id, username, email, password_hash FROM website_admins WHERE id=?')
+    .get('legacy-admin');
+  assert.deepEqual(migrated, {
+    id: 'legacy-admin',
+    username: 'owner@example.com',
+    email: 'owner@example.com',
+    password_hash: 'legacy-hash',
+  });
 });

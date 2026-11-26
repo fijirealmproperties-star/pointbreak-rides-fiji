@@ -7,12 +7,25 @@ const { requireWebsiteAdmin } = require('../middleware/website-admin-auth');
 const { normEmail, validEmail } = require('../verify');
 const { generateWebsiteTokens, verifyWebsiteRefreshToken } = require('../config/website-jwt');
 
+function normalizeUsername(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function validUsername(value) {
+  return /^[a-z0-9][a-z0-9._-]{2,31}$/.test(value) || validEmail(value);
+}
+
 module.exports = (db) => {
   const router = express.Router();
 
   function sessionFor(admin) {
     return {
-      user: { id: admin.id, email: admin.email, role: 'website_admin' },
+      user: {
+        id: admin.id,
+        username: admin.username || admin.email,
+        email: admin.email || null,
+        role: 'website_admin',
+      },
       ...generateWebsiteTokens(admin.id),
     };
   }
@@ -41,9 +54,15 @@ module.exports = (db) => {
     if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) {
       return res.status(403).json({ error: 'The setup key is incorrect' });
     }
-    const email = normEmail(req.body && req.body.email);
-    const password = req.body && req.body.password;
-    if (!validEmail(email)) return res.status(400).json({ error: 'Enter a valid website admin email address' });
+    const body = req.body || {};
+    const suppliedUsername = body.username || body.email;
+    const username = normalizeUsername(suppliedUsername);
+    const email = body.email ? normEmail(body.email) : null;
+    const password = body.password;
+    if (!validUsername(username)) {
+      return res.status(400).json({ error: 'Use a username with 3-32 letters, numbers, dots, underscores or hyphens' });
+    }
+    if (email && !validEmail(email)) return res.status(400).json({ error: 'Enter a valid email address' });
     if (typeof password !== 'string' || password.length < 12 || password.length > 200) {
       return res.status(400).json({ error: 'Choose a password between 12 and 200 characters' });
     }
@@ -53,9 +72,9 @@ module.exports = (db) => {
       if (db.prepare('SELECT id FROM website_admins LIMIT 1').get()) {
         return res.status(409).json({ error: 'The first website admin has already been created' });
       }
-      db.prepare('INSERT INTO website_admins (id, email, password_hash) VALUES (?, ?, ?)')
-        .run(id, email, passwordHash);
-      const admin = db.prepare('SELECT id, email FROM website_admins WHERE id=?').get(id);
+      db.prepare('INSERT INTO website_admins (id, username, email, password_hash) VALUES (?, ?, ?, ?)')
+        .run(id, username, email, passwordHash);
+      const admin = db.prepare('SELECT id, username, email FROM website_admins WHERE id=?').get(id);
       if (!admin) return res.status(500).json({ error: 'Could not create the website admin account' });
       res.status(201).json(sessionFor(admin));
     } catch (error) {
@@ -68,14 +87,20 @@ module.exports = (db) => {
   });
 
   router.post('/login', loginLimiter, async (req, res) => {
-    const email = normEmail(req.body && req.body.email);
-    const password = req.body && req.body.password;
-    if (!email || typeof password !== 'string') {
-      return res.status(400).json({ error: 'Email and password are required' });
+    const body = req.body || {};
+    const username = normalizeUsername(body.username || body.email);
+    const password = body.password;
+    if (!validUsername(username) || typeof password !== 'string') {
+      return res.status(400).json({ error: 'A valid username and password are required' });
     }
-    const admin = db.prepare('SELECT id, email, password_hash FROM website_admins WHERE email=?').get(email);
+    const admin = db.prepare(`
+      SELECT id, username, email, password_hash
+      FROM website_admins
+      WHERE username=? OR LOWER(email)=?
+      LIMIT 1
+    `).get(username, username);
     if (!admin || !(await bcrypt.compare(password, admin.password_hash))) {
-      return res.status(401).json({ error: 'Invalid website admin email or password' });
+      return res.status(401).json({ error: 'Invalid website admin username or password' });
     }
     res.json(sessionFor(admin));
   });
@@ -86,7 +111,7 @@ module.exports = (db) => {
     try {
       const decoded = verifyWebsiteRefreshToken(refreshToken);
       if (decoded.role !== 'website_admin') throw new Error('Invalid role');
-      const admin = db.prepare('SELECT id, email FROM website_admins WHERE id=?').get(decoded.userId);
+      const admin = db.prepare('SELECT id, username, email FROM website_admins WHERE id=?').get(decoded.userId);
       if (!admin) return res.status(401).json({ error: 'Website admin account not found' });
       res.json(sessionFor(admin));
     } catch {
