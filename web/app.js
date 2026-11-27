@@ -194,6 +194,9 @@ function initializeWebsiteBuilder() {
     queueWebsitePreviewUpdate();
   });
   document.getElementById('cms-theme-preset').addEventListener('change', applyWebsiteThemePreset);
+  ['background', 'surface', 'accent', 'text', 'border'].forEach((name) => {
+    document.getElementById(`cms-theme-${name}`).addEventListener('input', syncWebsiteThemePreset);
+  });
   renderWebsiteSectionOrder(cmsSectionOrder);
   renderWebsiteLinkFields([]);
 }
@@ -1662,11 +1665,11 @@ function fillWebsiteContentForm(content) {
   document.getElementById('cms-theme-text').value = theme.textColor || '#FFFFFF';
   document.getElementById('cms-theme-border').value = theme.borderColor || '#2A3B4D';
   document.getElementById('cms-theme-radius').value = String(theme.borderRadius == null ? 12 : theme.borderRadius);
-  document.getElementById('cms-theme-preset').value = 'custom';
   cmsBackgroundImageId = theme.backgroundImageId || null;
   cmsBackgroundPreviewUrl = theme.backgroundImageUrl ||
     (cmsBackgroundImageId ? `/api/website/media/${encodeURIComponent(cmsBackgroundImageId)}` : null);
   setWebsiteBackgroundPreview(cmsBackgroundPreviewUrl, cmsBackgroundImageId ? 'Current website background photo' : '');
+  syncWebsiteThemePreset();
   cmsSectionOrder = Array.isArray(content.sectionOrder)
     ? [...content.sectionOrder]
     : Object.keys(websiteSectionNames);
@@ -1678,7 +1681,36 @@ const websiteThemePresets = {
   lagoon: { backgroundColor: '#10243B', surfaceColor: '#1A2B3D', accentColor: '#2EB2A5', textColor: '#FFFFFF', borderColor: '#3A5264' },
   coral: { backgroundColor: '#251B28', surfaceColor: '#382532', accentColor: '#E88972', textColor: '#FFF7EF', borderColor: '#594151' },
   earth: { backgroundColor: '#19261C', surfaceColor: '#263629', accentColor: '#D0A66B', textColor: '#FFF9EF', borderColor: '#48543F' },
+  'fiji-day': { backgroundColor: '#082B3A', surfaceColor: '#124253', accentColor: '#F3C548', textColor: '#FFFFFF', borderColor: '#376273' },
+  halloween: { backgroundColor: '#1B1026', surfaceColor: '#2A1B38', accentColor: '#FF7518', textColor: '#FFF7E6', borderColor: '#55335D' },
+  christmas: { backgroundColor: '#10251D', surfaceColor: '#1D3829', accentColor: '#C8393B', textColor: '#FFF8E8', borderColor: '#42664C' },
+  easter: { backgroundColor: '#2A2030', surfaceColor: '#3A2D43', accentColor: '#E6A7C6', textColor: '#FFF9EF', borderColor: '#624D68' },
+  eid: { backgroundColor: '#0D1C2C', surfaceColor: '#182B3D', accentColor: '#D4AF37', textColor: '#FFF9E8', borderColor: '#3B5266' },
+  diwali: { backgroundColor: '#271422', surfaceColor: '#3B1F2D', accentColor: '#FF9B38', textColor: '#FFF8E8', borderColor: '#664454' },
+  'black-friday': { backgroundColor: '#111318', surfaceColor: '#1F232B', accentColor: '#F5C451', textColor: '#FFFFFF', borderColor: '#424852' },
+  sale: { backgroundColor: '#28151C', surfaceColor: '#3D2029', accentColor: '#FF5C7A', textColor: '#FFF7F8', borderColor: '#64404C' },
+  'festive-season': { backgroundColor: '#102521', surfaceColor: '#1B3831', accentColor: '#E7BD53', textColor: '#FFF8E8', borderColor: '#425C4D' },
+  climate: { backgroundColor: '#0F2827', surfaceColor: '#1A3A37', accentColor: '#6CCB85', textColor: '#F3FFF5', borderColor: '#3E6056' },
+  cancer: { backgroundColor: '#191C2A', surfaceColor: '#282D40', accentColor: '#F28DB2', textColor: '#FFF8FC', borderColor: '#494A63' },
 };
+
+function websiteThemeColorsFromForm() {
+  return {
+    backgroundColor: cmsFieldValue('cms-theme-background').toUpperCase(),
+    surfaceColor: cmsFieldValue('cms-theme-surface').toUpperCase(),
+    accentColor: cmsFieldValue('cms-theme-accent').toUpperCase(),
+    textColor: cmsFieldValue('cms-theme-text').toUpperCase(),
+    borderColor: cmsFieldValue('cms-theme-border').toUpperCase(),
+  };
+}
+
+function syncWebsiteThemePreset() {
+  const colors = websiteThemeColorsFromForm();
+  const presetName = Object.entries(websiteThemePresets).find(([, preset]) =>
+    Object.keys(colors).every((key) => preset[key] === colors[key])
+  );
+  document.getElementById('cms-theme-preset').value = presetName ? presetName[0] : 'custom';
+}
 
 function applyWebsiteThemePreset() {
   const preset = websiteThemePresets[document.getElementById('cms-theme-preset').value];
