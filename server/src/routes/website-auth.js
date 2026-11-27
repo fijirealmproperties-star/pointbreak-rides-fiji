@@ -1,6 +1,5 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { loginLimiter } = require('../middleware/rateLimiter');
 const { requireWebsiteAdmin } = require('../middleware/website-admin-auth');
@@ -34,25 +33,13 @@ module.exports = (db) => {
     const count = db.prepare('SELECT COUNT(*) AS count FROM website_admins').get().count;
     res.set('Cache-Control', 'no-store');
     res.json({
-      setupRequired: count === 0,
-      setupConfigured: typeof process.env.WEBSITE_ADMIN_SETUP_KEY === 'string' &&
-        process.env.WEBSITE_ADMIN_SETUP_KEY.length >= 32,
+      signupRequired: count === 0,
     });
   });
 
-  router.post('/setup', loginLimiter, async (req, res) => {
-    const configuredKey = process.env.WEBSITE_ADMIN_SETUP_KEY;
-    if (!configuredKey || configuredKey.length < 32) {
-      return res.status(503).json({ error: 'Website admin setup is not configured on the server' });
-    }
+  router.post('/signup', loginLimiter, async (req, res) => {
     if (db.prepare('SELECT id FROM website_admins LIMIT 1').get()) {
-      return res.status(409).json({ error: 'The first website admin has already been created' });
-    }
-    const suppliedKey = typeof (req.body && req.body.setupKey) === 'string' ? req.body.setupKey : '';
-    const expected = Buffer.from(configuredKey);
-    const supplied = Buffer.from(suppliedKey);
-    if (expected.length !== supplied.length || !crypto.timingSafeEqual(expected, supplied)) {
-      return res.status(403).json({ error: 'The setup key is incorrect' });
+      return res.status(409).json({ error: 'Website admin signup is closed' });
     }
     const body = req.body || {};
     const suppliedUsername = body.username || body.email;
@@ -70,7 +57,7 @@ module.exports = (db) => {
     try {
       const passwordHash = await bcrypt.hash(password, 12);
       if (db.prepare('SELECT id FROM website_admins LIMIT 1').get()) {
-        return res.status(409).json({ error: 'The first website admin has already been created' });
+        return res.status(409).json({ error: 'Website admin signup is closed' });
       }
       db.prepare('INSERT INTO website_admins (id, username, email, password_hash) VALUES (?, ?, ?, ?)')
         .run(id, username, email, passwordHash);
@@ -79,9 +66,9 @@ module.exports = (db) => {
       res.status(201).json(sessionFor(admin));
     } catch (error) {
       if (db.prepare('SELECT id FROM website_admins LIMIT 1').get()) {
-        return res.status(409).json({ error: 'A website admin was created while setup was in progress' });
+        return res.status(409).json({ error: 'Website admin signup is closed' });
       }
-      console.error('Website admin setup failed:', error.message);
+      console.error('Website admin signup failed:', error.message);
       return res.status(500).json({ error: 'Could not create the website admin account' });
     }
   });

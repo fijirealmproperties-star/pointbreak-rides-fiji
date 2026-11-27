@@ -19,14 +19,12 @@
         <button class="reg-btn login-submit" type="submit">Sign in to website editor</button>
       </form>
       <span id="website-admin-login-status" class="register-status" role="status" aria-live="polite"></span>
-      <button type="button" class="reg-btn reg-btn-ghost" onclick="closeWebsiteAdminAuth()">Back to editor preview</button>
-      <form id="website-admin-setup" hidden onsubmit="setupWebsiteAdmin(event)">
-        <h2>Create the separate website admin</h2>
-        <p class="admin-hint">This account is separate from rider, driver and app-admin accounts. The one-time setup key must be configured on the server.</p>
-        <label class="cms-field">One-time setup key<input id="website-admin-setup-key" class="reg-input" type="password" autocomplete="off" required></label>
-        <label class="cms-field">Username<input id="website-admin-setup-username" class="reg-input" autocomplete="username" required></label>
-        <label class="cms-field">New password (12 characters minimum)<input id="website-admin-setup-password" class="reg-input" type="password" minlength="12" autocomplete="new-password" required></label>
-        <button class="reg-btn login-submit" type="submit">Create website admin</button>
+      <form id="website-admin-signup" hidden onsubmit="signupWebsiteAdmin(event)">
+        <h2>Create your website admin account</h2>
+        <p class="admin-hint">This account is separate from rider, driver and app-admin accounts.</p>
+        <label class="cms-field">Username<input id="website-admin-signup-username" class="reg-input" autocomplete="username" required></label>
+        <label class="cms-field">Password (12 characters minimum)<input id="website-admin-signup-password" class="reg-input" type="password" minlength="12" autocomplete="new-password" required></label>
+        <button class="reg-btn login-submit" type="submit">Create account</button>
       </form>
     </section>
   </main>

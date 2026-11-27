@@ -308,30 +308,22 @@ function openWebsiteAdminAuth() {
   loadWebsiteAdminStatus();
 }
 
-function closeWebsiteAdminAuth() {
-  websiteAdminAuthVisible = false;
-  renderWebsiteAdminState();
-  if (websiteAdminPreviewMode) loadWebsiteEditorPreview();
-}
-
 async function loadWebsiteAdminStatus() {
   const status = document.getElementById('website-admin-login-status');
-  const setupForm = document.getElementById('website-admin-setup');
+  const signupForm = document.getElementById('website-admin-signup');
   const loginForm = document.getElementById('website-admin-login');
   try {
     const response = await nativeFetch(`${API_URL}/api/website-auth/status`, { cache: 'no-store' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Could not check website admin setup');
-    if (data.setupRequired) {
+    if (data.signupRequired) {
       loginForm.hidden = true;
-      setupForm.hidden = !data.setupConfigured;
-      status.textContent = data.setupConfigured
-        ? 'Create the first independent website admin account.'
-        : 'The owner must configure WEBSITE_ADMIN_SETUP_KEY on the server before creating the first website admin.';
+      signupForm.hidden = false;
+      status.textContent = 'Create the first independent website admin account.';
       status.className = 'register-status';
     } else {
       loginForm.hidden = false;
-      setupForm.hidden = true;
+      signupForm.hidden = true;
       status.textContent = '';
       status.className = 'register-status';
     }
@@ -376,23 +368,21 @@ async function websiteAdminLogin(event) {
   }
 }
 
-async function setupWebsiteAdmin(event) {
+async function signupWebsiteAdmin(event) {
   event.preventDefault();
   const status = document.getElementById('website-admin-login-status');
-  const setupKey = document.getElementById('website-admin-setup-key').value;
-  const username = document.getElementById('website-admin-setup-username').value.trim();
-  const password = document.getElementById('website-admin-setup-password').value;
+  const username = document.getElementById('website-admin-signup-username').value.trim();
+  const password = document.getElementById('website-admin-signup-password').value;
   try {
-    const response = await nativeFetch(`${API_URL}/api/website-auth/setup`, {
+    const response = await nativeFetch(`${API_URL}/api/website-auth/signup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ setupKey, username, password }),
+      body: JSON.stringify({ username, password }),
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || 'Could not create the website admin');
     saveWebsiteAdminSession(data);
-    document.getElementById('website-admin-setup-key').value = '';
-    document.getElementById('website-admin-setup-password').value = '';
+    document.getElementById('website-admin-signup-password').value = '';
   } catch (error) {
     status.textContent = error.message || 'Could not create the website admin';
     status.className = 'register-status error';
@@ -407,10 +397,11 @@ function websiteAdminLogout() {
   localStorage.removeItem('pb_website_admin_refresh');
   localStorage.removeItem('pb_website_admin_username');
   localStorage.removeItem('pb_website_admin_email');
-  websiteAdminAuthVisible = false;
+  websiteAdminAuthVisible = true;
   cmsPreviewUrls.forEach((url) => URL.revokeObjectURL(url));
   cmsPreviewUrls.clear();
   renderWebsiteAdminState();
+  loadWebsiteAdminStatus();
   loadWebsiteEditorPreview();
 }
 

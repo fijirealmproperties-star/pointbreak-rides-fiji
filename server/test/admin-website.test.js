@@ -267,31 +267,20 @@ test('website design settings validate and publish background media and safe lin
   assert.equal((await request(base, `/admin/website/media/${imageId}`, { method: 'DELETE', token: websiteAdmin })).status, 200);
 });
 
-test('first website admin setup is one-time and creates separate account tokens', async (t) => {
-  const previousKey = process.env.WEBSITE_ADMIN_SETUP_KEY;
-  process.env.WEBSITE_ADMIN_SETUP_KEY = 'test-website-setup-key-with-more-than-32-characters';
-  t.after(() => {
-    if (previousKey === undefined) delete process.env.WEBSITE_ADMIN_SETUP_KEY;
-    else process.env.WEBSITE_ADMIN_SETUP_KEY = previousKey;
-  });
+test('first website admin signup is one-time and creates separate account tokens', async (t) => {
   const { base, admin, db } = await createApp(t, { seedWebsiteAdmin: false });
   const status = await request(base, '/website-auth/status');
-  assert.equal(status.body.setupRequired, true);
-  assert.equal(status.body.setupConfigured, true);
-  assert.equal((await request(base, '/website-auth/setup', {
-    method: 'POST', body: { setupKey: 'wrong', username: 'pointbreakweb', password: 'a secure website password' },
-  })).status, 403);
-  assert.equal((await request(base, '/website-auth/setup', {
-    method: 'POST', body: { setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY, username: 'pointbreakweb', password: 'short' },
+  assert.equal(status.body.signupRequired, true);
+  assert.equal((await request(base, '/website-auth/signup', {
+    method: 'POST', body: { username: 'pointbreakweb', password: 'short' },
   })).status, 400);
-  assert.equal((await request(base, '/website-auth/setup', {
+  assert.equal((await request(base, '/website-auth/signup', {
     method: 'POST',
-    body: { setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY, username: 'x', password: 'a secure website password' },
+    body: { username: 'x', password: 'a secure website password' },
   })).status, 400);
-  const created = await request(base, '/website-auth/setup', {
+  const created = await request(base, '/website-auth/signup', {
     method: 'POST',
     body: {
-      setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY,
       username: ' PointBreakWeb ',
       password: 'a secure website password',
     },
@@ -301,10 +290,10 @@ test('first website admin setup is one-time and creates separate account tokens'
   assert.equal(created.body.user.email, null);
   assert.equal(created.body.user.role, 'website_admin');
   assert.equal(db.prepare('SELECT COUNT(*) AS count FROM users').get().count, 0);
-  assert.equal((await request(base, '/website-auth/setup', {
+  assert.equal((await request(base, '/website-auth/status')).body.signupRequired, false);
+  assert.equal((await request(base, '/website-auth/signup', {
     method: 'POST',
     body: {
-      setupKey: process.env.WEBSITE_ADMIN_SETUP_KEY,
       username: 'otheradmin',
       password: 'another secure password',
     },
