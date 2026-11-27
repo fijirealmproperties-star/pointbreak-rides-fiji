@@ -224,6 +224,7 @@ test('website design settings validate and publish background media and safe lin
       borderColor: '#3A5264',
       borderRadius: 20,
       backgroundImageId: imageId,
+      preset: 'eid',
     },
     sectionOrder: ['home', 'rides', 'features', 'booking', 'news', 'about', 'contact'],
     links: [{ label: 'Our story', url: '#about' }, { label: 'Email', url: 'mailto:owner@example.com' }],
@@ -236,6 +237,7 @@ test('website design settings validate and publish background media and safe lin
   assert.equal(saved.status, 200);
   const publicContent = (await request(base, '/website')).body.content;
   assert.equal(publicContent.theme.backgroundImageUrl, `/api/website/media/${imageId}`);
+  assert.equal(publicContent.theme.preset, 'eid');
   assert.deepEqual(publicContent.sectionOrder, customized.sectionOrder);
   assert.deepEqual(publicContent.links, customized.links);
   assert.equal(publicContent.contactPhone, '+679 123 4567');
@@ -245,6 +247,7 @@ test('website design settings validate and publish background media and safe lin
   const invalidCases = [
     { ...customized, theme: { ...customized.theme, accentColor: 'url(javascript:alert(1))' } },
     { ...customized, theme: { ...customized.theme, borderRadius: 33 } },
+    { ...customized, theme: { ...customized.theme, preset: 'unknown-occasion' } },
     { ...customized, sectionOrder: ['home', 'home', 'features', 'booking', 'news', 'about', 'contact'] },
     { ...customized, links: [{ label: 'Unsafe', url: 'javascript:alert(1)' }] },
     { ...customized, contactPhone: 'Call me!' },
