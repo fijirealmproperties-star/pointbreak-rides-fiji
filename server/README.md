@@ -90,12 +90,9 @@ The container builds the rider/driver web app and serves it at `/`, the API at
 (PWA + optional Android APK); see `../DEPLOY-FREE.md` §9.
 The separate website editor is at `/website-admin/`; it has its own website
 username/password and cannot be accessed with the rides-app admin account.
-To create the first website admin, set `WEBSITE_ADMIN_SETUP_KEY` to a random
-secret of at least 32 characters in the server environment and visit the editor.
-Choose a username and a password of at least 12 characters in the setup form.
-After the account is created, remove `WEBSITE_ADMIN_SETUP_KEY` from the server
-environment; the editor account remains in the database. Do not share the
-one-time setup key or store it in source control.
+When no website admin exists, the editor offers a one-time signup form to create
+the first website admin with a username and a password of at least 12 characters.
+Signup closes automatically after the first account is created.
 
 Production safety checks (the server refuses to start if these are wrong):
 `NODE_ENV=production` requires `JWT_SECRET` and `JWT_REFRESH_SECRET` (32+ chars,
