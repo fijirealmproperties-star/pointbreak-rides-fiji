@@ -69,6 +69,7 @@ const DEFAULT_WEBSITE_CONTENT = {
     borderColor: '#2A3B4D',
     borderRadius: 12,
     backgroundImageId: null,
+    preset: 'custom',
   },
   sectionOrder: ['home', 'features', 'rides', 'booking', 'news', 'about', 'contact'],
   links: [],
@@ -76,6 +77,10 @@ const DEFAULT_WEBSITE_CONTENT = {
 
 const SECTION_ORDER = ['home', 'features', 'rides', 'booking', 'news', 'about', 'contact'];
 const THEME_COLORS = ['backgroundColor', 'surfaceColor', 'accentColor', 'textColor', 'borderColor'];
+const THEME_PRESETS = [
+  'custom', 'lagoon', 'coral', 'earth', 'fiji-day', 'halloween', 'christmas',
+  'easter', 'eid', 'diwali', 'black-friday', 'sale', 'festive-season', 'climate', 'cancer',
+];
 
 function cleanText(value, maxLength) {
   return typeof value === 'string' ? value.trim().slice(0, maxLength) : '';
@@ -188,6 +193,9 @@ function validateWebsiteContent(input, db) {
     return { error: 'Border radius must be a whole number between 0 and 32' };
   }
   content.theme.borderRadius = borderRadius;
+  const preset = themeInput.preset == null ? 'custom' : cleanText(themeInput.preset, 32);
+  if (!THEME_PRESETS.includes(preset)) return { error: 'Choose a valid website theme preset' };
+  content.theme.preset = preset;
   content.theme.backgroundImageId = themeInput.backgroundImageId == null || themeInput.backgroundImageId === ''
     ? null
     : cleanText(themeInput.backgroundImageId, 80);

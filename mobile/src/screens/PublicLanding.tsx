@@ -22,6 +22,23 @@ const FIJI_HOURLY_TIMES = Array.from(
   { length: 24 },
   (_, hour) => `${String(hour).padStart(2, "0")}:00`
 );
+const THEME_DECORATIONS: Record<string, string[]> = {
+  lagoon: ["🌊", "🐚", "✦"],
+  coral: ["🌺", "🐚", "✿"],
+  earth: ["🌿", "🍃", "✦"],
+  "fiji-day": ["🇫🇯", "🌺", "✦"],
+  halloween: ["🎃", "🕸️", "🦇"],
+  christmas: ["🎄", "❄️", "🎁"],
+  easter: ["🐣", "🌷", "🥚"],
+  eid: ["🌙", "⭐", "✦"],
+  diwali: ["🪔", "✨", "🌼"],
+  "black-friday": ["🏷️", "✦", "◆"],
+  sale: ["％", "🏷️", "✦"],
+  "festive-season": ["✨", "🌺", "🎁"],
+  climate: ["🌱", "🍃", "☀️"],
+  cancer: ["🎗️", "🌸", "✦"],
+};
+
 type Section = "features" | "shop" | "booking" | "news" | "about" | "contact";
 type SiteLink = { label: string; url: string };
 type SectionOrder = Array<"home" | "features" | "rides" | "booking" | "news" | "about" | "contact">;
@@ -115,6 +132,7 @@ const DEFAULT_SITE_CONTENT = {
     borderRadius: 12,
     backgroundImageId: null as string | null,
     backgroundImageUrl: null as string | null,
+    preset: "custom",
   },
   sectionOrder: ["home", "features", "rides", "booking", "news", "about", "contact"] as SectionOrder,
   links: [] as SiteLink[],
@@ -476,6 +494,20 @@ export default function PublicLanding({ onContinue }: { onContinue: () => void }
             </View>
           </Animated.View>
           <View style={styles.heroShade} />
+          {THEME_DECORATIONS[theme.preset]?.map((decoration, index) => (
+            <View
+              key={`${theme.preset}-${index}`}
+              pointerEvents="none"
+              style={[
+                styles.themeDecoration,
+                index === 1 ? { top: 76, right: 146, width: 33, height: 33 } : null,
+                index === 2 ? { top: undefined, right: 30, bottom: 30, width: 36, height: 36 } : null,
+                { borderColor: `${theme.accentColor}99` },
+              ]}
+            >
+              <Text style={{ color: theme.textColor }}>{decoration}</Text>
+            </View>
+          ))}
           <View style={[styles.heroInner, wide ? styles.heroInnerWide : null]}>
             <View style={styles.heroCopy}>
               <View style={styles.eyebrow}>
@@ -903,6 +935,19 @@ const styles = StyleSheet.create({
   heroOuter: { width: "100%", alignSelf: "center", paddingHorizontal: 18, paddingBottom: 20 },
   hero: { flex: 1, minHeight: 610, borderRadius: 26, overflow: "hidden", justifyContent: "center", backgroundColor: "#0A2A63" },
   heroArtworkLayer: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0 },
+  themeDecoration: {
+    position: "absolute",
+    zIndex: 2,
+    top: 20,
+    right: 24,
+    width: 43,
+    height: 43,
+    borderWidth: 1,
+    borderRadius: 22,
+    backgroundColor: "rgba(5,15,28,0.3)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   heroImage: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, width: "100%", height: "100%", borderRadius: 26, opacity: 0.88 },
   heroShade: { position: "absolute", top: 0, right: 0, bottom: 0, left: 0, backgroundColor: "rgba(4, 17, 37, 0.32)" },
   heroInner: { flex: 1, paddingHorizontal: 30, paddingVertical: 48, justifyContent: "center" },

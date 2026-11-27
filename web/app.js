@@ -193,10 +193,10 @@ function initializeWebsiteBuilder() {
     websitePreviewSentImages.post = null;
     queueWebsitePreviewUpdate();
   });
-  document.getElementById('cms-theme-preset').addEventListener('change', applyWebsiteThemePreset);
   ['background', 'surface', 'accent', 'text', 'border'].forEach((name) => {
     document.getElementById(`cms-theme-${name}`).addEventListener('input', syncWebsiteThemePreset);
   });
+  renderWebsiteThemeThumbnails();
   renderWebsiteSectionOrder(cmsSectionOrder);
   renderWebsiteLinkFields([]);
 }
@@ -1669,7 +1669,7 @@ function fillWebsiteContentForm(content) {
   cmsBackgroundPreviewUrl = theme.backgroundImageUrl ||
     (cmsBackgroundImageId ? `/api/website/media/${encodeURIComponent(cmsBackgroundImageId)}` : null);
   setWebsiteBackgroundPreview(cmsBackgroundPreviewUrl, cmsBackgroundImageId ? 'Current website background photo' : '');
-  syncWebsiteThemePreset();
+  syncWebsiteThemePreset(theme.preset);
   cmsSectionOrder = Array.isArray(content.sectionOrder)
     ? [...content.sectionOrder]
     : Object.keys(websiteSectionNames);
@@ -1678,20 +1678,21 @@ function fillWebsiteContentForm(content) {
 }
 
 const websiteThemePresets = {
-  lagoon: { backgroundColor: '#10243B', surfaceColor: '#1A2B3D', accentColor: '#2EB2A5', textColor: '#FFFFFF', borderColor: '#3A5264' },
-  coral: { backgroundColor: '#251B28', surfaceColor: '#382532', accentColor: '#E88972', textColor: '#FFF7EF', borderColor: '#594151' },
-  earth: { backgroundColor: '#19261C', surfaceColor: '#263629', accentColor: '#D0A66B', textColor: '#FFF9EF', borderColor: '#48543F' },
-  'fiji-day': { backgroundColor: '#082B3A', surfaceColor: '#124253', accentColor: '#F3C548', textColor: '#FFFFFF', borderColor: '#376273' },
-  halloween: { backgroundColor: '#1B1026', surfaceColor: '#2A1B38', accentColor: '#FF7518', textColor: '#FFF7E6', borderColor: '#55335D' },
-  christmas: { backgroundColor: '#10251D', surfaceColor: '#1D3829', accentColor: '#C8393B', textColor: '#FFF8E8', borderColor: '#42664C' },
-  easter: { backgroundColor: '#2A2030', surfaceColor: '#3A2D43', accentColor: '#E6A7C6', textColor: '#FFF9EF', borderColor: '#624D68' },
-  eid: { backgroundColor: '#0D1C2C', surfaceColor: '#182B3D', accentColor: '#D4AF37', textColor: '#FFF9E8', borderColor: '#3B5266' },
-  diwali: { backgroundColor: '#271422', surfaceColor: '#3B1F2D', accentColor: '#FF9B38', textColor: '#FFF8E8', borderColor: '#664454' },
-  'black-friday': { backgroundColor: '#111318', surfaceColor: '#1F232B', accentColor: '#F5C451', textColor: '#FFFFFF', borderColor: '#424852' },
-  sale: { backgroundColor: '#28151C', surfaceColor: '#3D2029', accentColor: '#FF5C7A', textColor: '#FFF7F8', borderColor: '#64404C' },
-  'festive-season': { backgroundColor: '#102521', surfaceColor: '#1B3831', accentColor: '#E7BD53', textColor: '#FFF8E8', borderColor: '#425C4D' },
-  climate: { backgroundColor: '#0F2827', surfaceColor: '#1A3A37', accentColor: '#6CCB85', textColor: '#F3FFF5', borderColor: '#3E6056' },
-  cancer: { backgroundColor: '#191C2A', surfaceColor: '#282D40', accentColor: '#F28DB2', textColor: '#FFF8FC', borderColor: '#494A63' },
+  custom: { label: 'Custom design', decoration: '✦', colors: { backgroundColor: '#0A1628', surfaceColor: '#1A2B3D', accentColor: '#33AADD', textColor: '#FFFFFF', borderColor: '#2A3B4D' } },
+  lagoon: { label: 'Lagoon', decoration: '🌊', colors: { backgroundColor: '#10243B', surfaceColor: '#1A2B3D', accentColor: '#2EB2A5', textColor: '#FFFFFF', borderColor: '#3A5264' } },
+  coral: { label: 'Coral sunset', decoration: '🌺', colors: { backgroundColor: '#251B28', surfaceColor: '#382532', accentColor: '#E88972', textColor: '#FFF7EF', borderColor: '#594151' } },
+  earth: { label: 'Island earth', decoration: '🌿', colors: { backgroundColor: '#19261C', surfaceColor: '#263629', accentColor: '#D0A66B', textColor: '#FFF9EF', borderColor: '#48543F' } },
+  'fiji-day': { label: 'Fiji Day', decoration: '🇫🇯', colors: { backgroundColor: '#082B3A', surfaceColor: '#124253', accentColor: '#F3C548', textColor: '#FFFFFF', borderColor: '#376273' } },
+  halloween: { label: 'Halloween', decoration: '🎃', colors: { backgroundColor: '#1B1026', surfaceColor: '#2A1B38', accentColor: '#FF7518', textColor: '#FFF7E6', borderColor: '#55335D' } },
+  christmas: { label: 'Christmas', decoration: '🎄', colors: { backgroundColor: '#10251D', surfaceColor: '#1D3829', accentColor: '#C8393B', textColor: '#FFF8E8', borderColor: '#42664C' } },
+  easter: { label: 'Easter', decoration: '🐣', colors: { backgroundColor: '#2A2030', surfaceColor: '#3A2D43', accentColor: '#E6A7C6', textColor: '#FFF9EF', borderColor: '#624D68' } },
+  eid: { label: 'Eid', decoration: '🌙', colors: { backgroundColor: '#0D1C2C', surfaceColor: '#182B3D', accentColor: '#D4AF37', textColor: '#FFF9E8', borderColor: '#3B5266' } },
+  diwali: { label: 'Diwali', decoration: '🪔', colors: { backgroundColor: '#271422', surfaceColor: '#3B1F2D', accentColor: '#FF9B38', textColor: '#FFF8E8', borderColor: '#664454' } },
+  'black-friday': { label: 'Black Friday', decoration: '🏷️', colors: { backgroundColor: '#111318', surfaceColor: '#1F232B', accentColor: '#F5C451', textColor: '#FFFFFF', borderColor: '#424852' } },
+  sale: { label: 'Sale', decoration: '％', colors: { backgroundColor: '#28151C', surfaceColor: '#3D2029', accentColor: '#FF5C7A', textColor: '#FFF7F8', borderColor: '#64404C' } },
+  'festive-season': { label: 'Festive season', decoration: '✨', colors: { backgroundColor: '#102521', surfaceColor: '#1B3831', accentColor: '#E7BD53', textColor: '#FFF8E8', borderColor: '#425C4D' } },
+  climate: { label: 'Climate action', decoration: '🌱', colors: { backgroundColor: '#0F2827', surfaceColor: '#1A3A37', accentColor: '#6CCB85', textColor: '#F3FFF5', borderColor: '#3E6056' } },
+  cancer: { label: 'Cancer awareness', decoration: '🎗️', colors: { backgroundColor: '#191C2A', surfaceColor: '#282D40', accentColor: '#F28DB2', textColor: '#FFF8FC', borderColor: '#494A63' } },
 };
 
 function websiteThemeColorsFromForm() {
@@ -1704,21 +1705,79 @@ function websiteThemeColorsFromForm() {
   };
 }
 
-function syncWebsiteThemePreset() {
-  const colors = websiteThemeColorsFromForm();
-  const presetName = Object.entries(websiteThemePresets).find(([, preset]) =>
-    Object.keys(colors).every((key) => preset[key] === colors[key])
-  );
-  document.getElementById('cms-theme-preset').value = presetName ? presetName[0] : 'custom';
+function renderWebsiteThemeThumbnails() {
+  const container = document.getElementById('cms-theme-thumbnails');
+  if (!container) return;
+  container.replaceChildren();
+  Object.entries(websiteThemePresets).forEach(([name, preset]) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'cms-theme-thumb';
+    card.dataset.preset = name;
+    card.setAttribute('aria-pressed', 'false');
+    card.setAttribute('aria-label', `${preset.label} theme${name === 'custom' ? '' : ` with ${preset.decoration} decorations`}`);
+    Object.entries({
+      '--thumb-bg': preset.colors.backgroundColor,
+      '--thumb-surface': preset.colors.surfaceColor,
+      '--thumb-accent': preset.colors.accentColor,
+      '--thumb-text': preset.colors.textColor,
+    }).forEach(([property, value]) => card.style.setProperty(property, value));
+
+    const artwork = document.createElement('span');
+    artwork.className = 'cms-theme-thumb-art';
+    const nav = document.createElement('i');
+    nav.className = 'cms-theme-thumb-nav';
+    const lines = document.createElement('i');
+    lines.className = 'cms-theme-thumb-lines';
+    const cta = document.createElement('i');
+    cta.className = 'cms-theme-thumb-cta';
+    const decoration = document.createElement('span');
+    decoration.className = 'cms-theme-thumb-decoration';
+    decoration.textContent = preset.decoration;
+    artwork.append(nav, lines, cta, decoration);
+    const label = document.createElement('span');
+    label.className = 'cms-theme-thumb-name';
+    label.textContent = preset.label;
+    const swatches = document.createElement('span');
+    swatches.className = 'cms-theme-thumb-swatches';
+    [preset.colors.backgroundColor, preset.colors.surfaceColor, preset.colors.accentColor].forEach((color) => {
+      const swatch = document.createElement('i');
+      swatch.style.backgroundColor = color;
+      swatches.append(swatch);
+    });
+    card.append(artwork, label, swatches);
+    card.addEventListener('click', () => applyWebsiteThemePreset(name));
+    container.append(card);
+  });
+  syncWebsiteThemePreset(document.getElementById('cms-theme-preset').value);
 }
 
-function applyWebsiteThemePreset() {
-  const preset = websiteThemePresets[document.getElementById('cms-theme-preset').value];
+function syncWebsiteThemePreset(preferredPreset) {
+  const colors = websiteThemeColorsFromForm();
+  const matchingPreset = (name) => websiteThemePresets[name] &&
+    Object.keys(colors).every((key) => websiteThemePresets[name].colors[key] === colors[key]);
+  const presetName = matchingPreset(preferredPreset)
+    ? preferredPreset
+    : Object.entries(websiteThemePresets).find(([, preset]) =>
+      Object.keys(colors).every((key) => preset.colors[key] === colors[key])
+    )?.[0] || 'custom';
+  document.getElementById('cms-theme-preset').value = presetName;
+  document.querySelectorAll('.cms-theme-thumb').forEach((card) => {
+    card.setAttribute('aria-pressed', String(card.dataset.preset === presetName));
+  });
+  return presetName;
+}
+
+function applyWebsiteThemePreset(name) {
+  const presetName = name || document.getElementById('cms-theme-preset').value;
+  const preset = websiteThemePresets[presetName];
   if (!preset) return;
-  Object.entries(preset).forEach(([key, value]) => {
+  Object.entries(preset.colors).forEach(([key, value]) => {
     const control = document.getElementById(`cms-theme-${key.replace('Color', '').replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`);
     if (control) control.value = value;
   });
+  document.getElementById('cms-theme-preset').value = presetName;
+  syncWebsiteThemePreset(presetName);
   queueWebsitePreviewUpdate();
 }
 
@@ -1904,6 +1963,7 @@ function websiteContentFromForm() {
       borderColor: cmsFieldValue('cms-theme-border'),
       borderRadius: Number(cmsFieldValue('cms-theme-radius')),
       backgroundImageId: cmsBackgroundImageId,
+      preset: cmsFieldValue('cms-theme-preset') || 'custom',
     },
     sectionOrder: [...cmsSectionOrder],
     links: [...document.querySelectorAll('#cms-custom-links .cms-link-row')].map((row) => ({
