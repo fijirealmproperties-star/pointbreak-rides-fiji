@@ -82,6 +82,28 @@ test("requested ride meter labels the estimated timer and fare", () => {
   assert.ok(text.includes("Estimated between updates · final fare confirmed by server"));
 });
 
+test("rider meter shows the live waiting timer", () => {
+  const { default: TaxiMeter } = load("components/TaxiMeter.tsx", {
+    "../theme": load("theme.ts"),
+    "../rideMeterDisplay": load("rideMeterDisplay.ts"),
+    "react": { ...require("react"), useState: () => [0, () => {}], useEffect: () => {} },
+    "react-native": { View: "View", Text: "Text", StyleSheet: { create: (styles) => styles } },
+  });
+  const element = TaxiMeter({ ride: {
+    fare: 2, distance_km: 1, duration_min: 4, meter_distance_km: 0,
+    meter_fare: 2, meter_wait_min: 1,
+  } });
+  const text = [];
+  function collect(node) {
+    if (typeof node === "string" || typeof node === "number") text.push(String(node));
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node && node.props) collect(node.props.children);
+  }
+  collect(element);
+  assert.ok(text.includes("WAITING TIME"));
+  assert.ok(text.includes("01:00"));
+});
+
 test("stationary GPS fixes reach the ride meter without moving the map position", () => {
   const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   let success;

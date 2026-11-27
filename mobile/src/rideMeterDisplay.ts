@@ -1,5 +1,5 @@
 const WAITING_RATE_PER_MIN = 0.18;
-const MAX_ESTIMATE_MS = 5000;
+export const MAX_ESTIMATE_MS = 10000;
 
 export function estimateRideMeter(
   waitMin: number | null | undefined,

@@ -9,6 +9,12 @@ const ACTIVE_STATUSES = ['requested', 'accepted', 'arrived', 'in_progress'];
 const stopSince = new Map();
 const anchors = new Map();
 
+function meterWaitingIncrement(sinceLast, speedKmh) {
+  if (!Number.isFinite(sinceLast) || sinceLast <= 0 || sinceLast >= 15 / 60) return 0;
+  if (!Number.isFinite(speedKmh) || speedKmh >= 10) return 0;
+  return Math.min(sinceLast, 10 / 60);
+}
+
 function setupSocket(io, matchingEngine, db) {
   io.on('connection', (socket) => {
     socket.userId = null;
@@ -150,7 +156,7 @@ function setupSocket(io, matchingEngine, db) {
           anchor.speed = 0;
         }
         speedKmh = anchor.speed;
-        if (sinceLast > 0 && sinceLast < 5 && speedKmh < 10) meterWaitMin += sinceLast;
+        meterWaitMin += meterWaitingIncrement(sinceLast, speedKmh);
         if (speedKmh < 10) {
           if (!stopSince.has(rideId)) stopSince.set(rideId, Date.now());
           stoppedSec = Math.round((Date.now() - stopSince.get(rideId)) / 1000);
@@ -238,4 +244,4 @@ function setupSocket(io, matchingEngine, db) {
   });
 }
 
-module.exports = { setupSocket };
+module.exports = { setupSocket, meterWaitingIncrement };
