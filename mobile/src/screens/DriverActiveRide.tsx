@@ -81,7 +81,12 @@ export default function DriverActiveRide({ rideId, onDone }: Props) {
       const socket = getSocket() || connectSocket(token || "");
       const onStatus = (ev: any) => {
         if (!ev || ev.ride_id !== rideId) return;
-        if (ev.ride && ev.ride.status) setRide(ev.ride);
+        if (ev.ride && ev.ride.status) {
+          setRide(ev.ride);
+          if (ev.ride.status === "in_progress" && ev.ride.path_json) {
+            setLiveRoute(parsePath(ev.ride.path_json));
+          }
+        }
         else if (ev.status) setRide((r) => (r ? { ...r, status: ev.status } : r));
       };
       const onLoc = (ev: any) => {

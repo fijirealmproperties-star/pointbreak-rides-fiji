@@ -526,11 +526,11 @@ class MatchingEngine {
     return fresh;
   }
 
-  // Final fare from the metered distance travelled; falls back to the quoted
-  // estimate when no usable meter reading was recorded.
+  // Final fare from recorded meter data; fall back to the quote only for rides
+  // from older records that never started the live meter.
   _finalizeFare(ride) {
     const meterKm = Number(ride.meter_distance_km) || 0;
-    const metered = meterKm >= 0.1;
+    const metered = !!ride.meter_started_at || meterKm >= 0.1;
     const distanceKm = metered ? meterKm : Number(ride.distance_km) || 0;
 
     // Waiting minutes: measured when metered, otherwise ~15% of the quoted trip.
