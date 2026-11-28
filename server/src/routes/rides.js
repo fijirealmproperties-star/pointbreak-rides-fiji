@@ -1,7 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const { requireAuth, requireRole } = require('../middleware/auth');
-const { haversine, calculateFare, computeRoutePath, meterFareFor } = require('../rides/fare');
+const { haversine, calculateFare, computeRoutePath } = require('../rides/fare');
 const { getRoadRoute } = require('../rides/routing');
 const { loadRide, rideForDriver } = require('../rides/ride-utils');
 const { cancellationFee } = require('../rides/matching');
@@ -231,84 +231,6 @@ module.exports = (db, io, matchingEngine) => {
       res.json(rideForDriver(ride));
     } catch (err) {
       res.status(500).json({ error: 'Failed to update ride' });
-    }
-  });
-
-  router.post('/:id/destination', requireRole('rider'), async (req, res) => {
-    try {
-      const ride = db.prepare('SELECT * FROM rides WHERE id=?').get(req.params.id);
-      if (!ride) return res.status(404).json({ error: 'Ride not found' });
-      if (ride.rider_id !== req.user.userId) {
-        return res.status(403).json({ error: 'Not authorized to change this destination' });
-      }
-      if (ride.status !== 'in_progress') {
-        return res.status(409).json({ error: 'The destination can only be changed during an active trip' });
-      }
-
-      const body = req.body || {};
-      const lat = Number(body.lat);
-      const lng = Number(body.lng);
-      const name = typeof body.name === 'string' ? body.name.trim() : '';
-      if (!Number.isFinite(lat) || lat < -90 || lat > 90 ||
-          !Number.isFinite(lng) || lng < -180 || lng > 180 ||
-          !name || name.length > 200) {
-        return res.status(400).json({ error: 'A valid destination name and map location are required' });
-      }
-      if (!Number.isFinite(Number(ride.driver_lat)) || !Number.isFinite(Number(ride.driver_lng))) {
-        return res.status(409).json({ error: 'Waiting for the driver’s current location. Please try again shortly.' });
-      }
-
-      const remaining = await estimateFor(
-        db,
-        { lat: Number(ride.driver_lat), lng: Number(ride.driver_lng) },
-        { id: null, name, short_name: name, type: 'pin', lat, lng, region: 'Pinned location' }
-      );
-      const currentRide = db.prepare('SELECT * FROM rides WHERE id=?').get(ride.id);
-      if (!currentRide || currentRide.status !== 'in_progress') {
-        return res.status(409).json({ error: 'This trip is no longer in progress' });
-      }
-      const meterDistanceKm = Math.max(0, Number(currentRide.meter_distance_km) || 0);
-      const meterWaitMin = Math.max(0, Number(currentRide.meter_wait_min) || 0);
-      const totalDistanceKm = Math.round((meterDistanceKm + remaining.distance_km) * 100) / 100;
-      const startedAt = currentRide.meter_started_at || currentRide.pickup_at;
-      const startedMs = startedAt ? Date.parse(`${String(startedAt).replace(' ', 'T')}Z`) : NaN;
-      const elapsedMin = Number.isFinite(startedMs) ? Math.max(0, (Date.now() - startedMs) / 60000) : 0;
-      const totalDurationMin = Math.round((elapsedMin + remaining.duration_min) * 100) / 100;
-      const projectedFare = meterFareFor(
-        currentRide,
-        totalDistanceKm,
-        meterWaitMin + remaining.duration_min * 0.15
-      ).fare;
-
-      const update = db.prepare(`
-        UPDATE rides
-        SET dropoff_place=?, dropoff_lat=?, dropoff_lng=?, path_json=?,
-            distance_km=?, duration_min=?, fare=?
-        WHERE id=? AND rider_id=? AND status='in_progress'
-      `).run(
-        name, lat, lng, JSON.stringify(remaining.path), totalDistanceKm,
-        totalDurationMin, projectedFare, ride.id, req.user.userId
-      );
-      if (!update.changes) return res.status(409).json({ error: 'This trip is no longer in progress' });
-
-      const updatedRide = loadRide(db, ride.id);
-      matchingEngine._emitToUser(ride.rider_id, 'ride_status', {
-        ride_id: ride.id,
-        status: updatedRide.status,
-        ride: updatedRide,
-      });
-      matchingEngine._emitToDriver(ride.driver_id, 'ride_status', {
-        ride_id: ride.id,
-        status: updatedRide.status,
-        ride: rideForDriver(updatedRide),
-      });
-      res.json({
-        ride: updatedRide,
-        remaining_distance_km: remaining.distance_km,
-        remaining_duration_min: remaining.duration_min,
-      });
-    } catch (err) {
-      res.status(500).json({ error: 'Could not update the destination' });
     }
   });
 

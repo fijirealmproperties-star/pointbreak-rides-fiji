@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { colors, typography, fmtFare, fmtKm, fmtDuration, statusColor } from "../theme";
 import { api, getToken, Ride, parsePath } from "../api";
 import { connectSocket, getSocket } from "../socket";
-import MapView, { MapMarker, MapPoint } from "../components/MapView";
+import MapView, { MapMarker } from "../components/MapView";
 import TaxiMeter from "../components/TaxiMeter";
 import { bearing, haversine } from "../geo";
 import { confirmAsync } from "../confirm";
@@ -72,10 +72,6 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
   const [rating, setRating] = useState(0);
   const [rated, setRated] = useState(false);
   const [rateBusy, setRateBusy] = useState(false);
-  const [destinationPinMode, setDestinationPinMode] = useState(false);
-  const [destinationBusy, setDestinationBusy] = useState(false);
-  const [destinationMessage, setDestinationMessage] = useState("");
-  const [recenterToken, setRecenterToken] = useState(0);
   const mountedRef = useRef(true);
 
   useEffect(() => {
@@ -123,6 +119,7 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
           if (typeof ev.meter_distance_km === "number") next.meter_distance_km = ev.meter_distance_km;
           if (typeof ev.meter_fare === "number") next.meter_fare = ev.meter_fare;
           if (typeof ev.meter_wait_min === "number") next.meter_wait_min = ev.meter_wait_min;
+          if (typeof ev.meter_duration_min === "number") next.meter_duration_min = ev.meter_duration_min;
           if (typeof ev.speed_kmh === "number") {
             next.speed_kmh = ev.speed_kmh;
             next.stopped_sec = typeof ev.stopped_sec === "number" ? ev.stopped_sec : 0;
@@ -203,37 +200,6 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
       ? haversine(driverLat, driverLng, ride.pickup_lat, ride.pickup_lng)
       : null;
 
-  async function correctDestination(point: MapPoint) {
-    if (destinationBusy) return;
-    setDestinationBusy(true);
-    setDestinationMessage("Updating your drop-off…");
-    let name = "Dropped pin";
-    try {
-      const address = await api<{ label?: string }>("/geo/reverse", {
-        method: "POST",
-        body: { lat: point.lat, lng: point.lng },
-      });
-      if (address.label) name = address.label;
-    } catch {
-      // The pinned coordinates can still be routed if reverse geocoding is unavailable.
-    }
-
-    try {
-      const result = await api<{ ride: Ride }>(`/rides/${rideId}/destination`, {
-        method: "POST",
-        body: { name, lat: point.lat, lng: point.lng },
-      });
-      if (!result.ride) throw new Error("The destination update did not return a ride.");
-      setRide(result.ride);
-      setDestinationPinMode(false);
-      setDestinationMessage(`Drop-off updated to ${result.ride.dropoff_place}. Your meter keeps its travelled distance.`);
-    } catch (e: any) {
-      setDestinationMessage(e.message || "Could not update the drop-off.");
-    } finally {
-      setDestinationBusy(false);
-    }
-  }
-
   async function cancelRide() {
     setCancelBusy(true);
     try {
@@ -302,8 +268,6 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
         zoom={0.04}
         markers={markers}
         route={route}
-        onMapClick={status === "in_progress" && destinationPinMode ? correctDestination : undefined}
-        recenterToken={recenterToken}
         vehicle={
           driverLat != null && driverLng != null
             ? { lat: driverLat, lng: driverLng, angle: vehicleAngle, color: colors.sunset, icon: ride.vehicle_icon || undefined }
@@ -313,15 +277,6 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
       <View style={styles.mapAttribution}>
         <Text style={styles.mapAttributionText}>Ride {ride.id.slice(0, 6).toUpperCase()}</Text>
       </View>
-      {destinationPinMode ? (
-        <View style={styles.pinPrompt}>
-          <Text style={styles.pinPromptText}>Tap the map to pin the corrected drop-off</Text>
-          <TouchableOpacity onPress={() => setDestinationPinMode(false)} disabled={destinationBusy}>
-            <Text style={styles.pinCancel}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
-
       <View style={styles.card}>
         {status === "requested" || status === "searching" ? (
           ride.driver_name ? (
@@ -389,25 +344,7 @@ export default function RiderActiveRide({ rideId, onClose }: Props) {
             <Text style={styles.statusSub}>
               {ride.driver_name || "Your driver"} · {ride.vehicle_model || "—"}
             </Text>
-            <TaxiMeter ride={ride} />
-            {status === "in_progress" ? (
-              <View style={styles.destinationChange}>
-                <TouchableOpacity
-                  style={[styles.primaryBtn, styles.destinationBtn, destinationBusy && styles.primaryBtnDisabled]}
-                  disabled={destinationBusy}
-                  onPress={() => {
-                    setDestinationMessage("");
-                    setDestinationPinMode(true);
-                    setRecenterToken((value) => value + 1);
-                  }}
-                >
-                  <Text style={styles.primaryBtnText}>
-                    {destinationPinMode ? "Tap the map to change drop-off" : "Correct drop-off"}
-                  </Text>
-                </TouchableOpacity>
-                {destinationMessage ? <Text style={styles.destinationMessage}>{destinationMessage}</Text> : null}
-              </View>
-            ) : null}
+            <TaxiMeter ride={ride} showWaitingTimer={true} />
           </View>
         ) : status === "completed" ? (
           <View style={styles.statusBlock}>
@@ -483,26 +420,6 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   mapAttributionText: { color: colors.textMuted, fontSize: typography.tiny },
-  pinPrompt: {
-    position: "absolute",
-    top: 82,
-    left: 16,
-    right: 16,
-    zIndex: 2,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 12,
-    borderRadius: 12,
-    backgroundColor: colors.deep,
-    paddingHorizontal: 14,
-    paddingVertical: 11,
-  },
-  pinPromptText: { color: colors.text, fontSize: typography.small, fontWeight: "700", flex: 1 },
-  pinCancel: { color: colors.coral, fontWeight: "800" },
-  destinationChange: { alignSelf: "stretch", marginTop: 12 },
-  destinationBtn: { backgroundColor: colors.ocean },
-  destinationMessage: { color: colors.textMuted, fontSize: typography.small, textAlign: "center", marginTop: 8 },
   card: {
     backgroundColor: colors.card,
     borderTopLeftRadius: 24,

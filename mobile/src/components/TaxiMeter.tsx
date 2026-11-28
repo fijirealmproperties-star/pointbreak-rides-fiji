@@ -35,8 +35,12 @@ export default function TaxiMeter({ ride, showWaitingTimer = true }: { ride: Rid
           <Text style={styles.meterCellLabel}>Trip est.</Text>
         </View>
         <View style={styles.meterCell}>
-          <Text style={styles.meterCellValue}>{fmtDuration(ride.duration_min)}</Text>
-          <Text style={styles.meterCellLabel}>Est. time</Text>
+          <Text style={styles.meterCellValue}>
+            {fmtDuration(ride.meter_duration_min ?? ride.duration_min)}
+          </Text>
+          <Text style={styles.meterCellLabel}>
+            {typeof ride.meter_duration_min === "number" ? "Elapsed" : "Trip est."}
+          </Text>
         </View>
       </View>
       {showWaitingTimer ? (
@@ -51,7 +55,7 @@ export default function TaxiMeter({ ride, showWaitingTimer = true }: { ride: Rid
         </View>
       ) : null}
       <Text style={styles.tariff}>
-        Flag fall FJ$2 day · FJ$3 night · FJ$0.14 / 100 m · FJ$0.18 / min waiting
+        Fare uses distance travelled and waiting time: FJ$0.14 / 100 m · FJ$0.18 / min waiting
       </Text>
     </View>
   );
