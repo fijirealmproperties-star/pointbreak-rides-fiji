@@ -64,6 +64,7 @@ export interface Ride {
   meter_distance_km?: number | null;
   meter_fare?: number | null;
   meter_wait_min?: number | null;
+  meter_duration_min?: number | null;
   meter_started_at?: string | null;
   speed_kmh?: number | null;
   stopped_sec?: number | null;

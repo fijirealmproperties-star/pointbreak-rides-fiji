@@ -104,6 +104,30 @@ test("rider meter shows the live waiting timer", () => {
   assert.ok(text.includes("01:00"));
 });
 
+test("ride meter displays elapsed trip time alongside the distance-based fare", () => {
+  const { default: TaxiMeter } = load("components/TaxiMeter.tsx", {
+    "../theme": load("theme.ts"),
+    "../rideMeterDisplay": load("rideMeterDisplay.ts"),
+    "react": { ...require("react"), useState: () => [0, () => {}], useEffect: () => {} },
+    "react-native": { View: "View", Text: "Text", StyleSheet: { create: (styles) => styles } },
+  });
+  const element = TaxiMeter({ ride: {
+    fare: 4.8, distance_km: 3.2, duration_min: 12,
+    meter_distance_km: 2, meter_fare: 4.8, meter_wait_min: 5,
+    meter_duration_min: 7,
+  } });
+  const text = [];
+  function collect(node) {
+    if (typeof node === "string" || typeof node === "number") text.push(String(node));
+    else if (Array.isArray(node)) node.forEach(collect);
+    else if (node && node.props) collect(node.props.children);
+  }
+  collect(element);
+  assert.ok(text.includes("7 min"));
+  assert.ok(text.includes("Elapsed"));
+  assert.ok(text.includes("Fare uses distance travelled and waiting time: FJ$0.14 / 100 m · FJ$0.18 / min waiting"));
+});
+
 test("stationary GPS fixes reach the ride meter without moving the map position", () => {
   const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, "navigator");
   let success;
